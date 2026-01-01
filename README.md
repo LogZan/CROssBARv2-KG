@@ -7,7 +7,7 @@
   - [Data](#data)
 
 # CROssBAR-KG
-This is the repo for CROssBARv2 Knowledge Graph (KG) data. CROssBARv2 is a heterogeneous general-purpose biomedical KG-based system. 
+This is the repo for Protein Lab Knowledge Graph (KG) based on CROssBARv2. CROssBARv2 is a heterogeneous general-purpose biomedical KG-based system. 
 
 This repository provides a collection of configurable and reusable **adapter scripts** designed to collect, process, and harmonize biological data. Each adapter is responsible for handling a specific entity type or data source, making the system flexible and easy to extend.  
 
