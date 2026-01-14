@@ -13,7 +13,8 @@ services:
       NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
       FILL_DB_ON_STARTUP: "yes"
     volumes:
-      - /GenSIvePFS/users/clzeng/docker_data:/data # Give -R 777 for this path
+      # Give -R 777 for this path
+      - /GenSIvePFS/users/clzeng/docker_data:/data:rw
       - ./scripts/import_local.sh:/scripts/import_local.sh
       - ./biocypher-out:/biocypher-out:ro
       # Mount the full path so import scripts work
@@ -26,11 +27,13 @@ services:
     image: neo4j:5.26.19-enterprise
     container_name: deploy
     volumes:
-      - /GenSIvePFS/users/clzeng/docker_data:/data
+      - /GenSIvePFS/users/clzeng/docker_data:/data:rw
     environment:
       NEO4J_dbms_security_auth__enabled: "false"
       NEO4J_dbms_databases_default__to__read__only: "false"
       NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
     ports:
       - "127.0.0.1:7474:7474"
       - "7687:7687"
