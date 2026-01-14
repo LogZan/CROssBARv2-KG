@@ -17,12 +17,16 @@ import os
 import h5py
 import ijson
 import json
+import requests
 
 from tqdm import tqdm
 from biocypher._logger import logger
 from bioregistry import normalize_curie
 
-from pydantic import BaseModel, DirectoryPath, FilePath, validate_call
+from pydantic import BaseModel, DirectoryPath, FilePath, HttpUrl, validate_call
+
+# Default embedding directory
+DEFAULT_EMBEDDING_DIR = "/GenSIvePFS/users/data/UniProt/UniProtKB_SwissProt/embeddings"
 
 logger.debug(f"Loading module {__name__}.")
 
@@ -307,22 +311,19 @@ class UniprotSwissprot:
         # Load embeddings if requested
         if UniprotNodeField.PROTT5_EMBEDDING.value in self.node_fields:
             self.data[UniprotNodeField.PROTT5_EMBEDDING.value] = {}
-            if prott5_embedding_output_path:
-                self.download_prott5_embeddings(
-                    prott5_embedding_output_path=prott5_embedding_output_path
-                )
+            self.download_prott5_embeddings(
+                prott5_embedding_output_path=prott5_embedding_output_path
+            )
 
         if UniprotNodeField.ESM2_EMBEDDING.value in self.node_fields:
             self.data[UniprotNodeField.ESM2_EMBEDDING.value] = {}
-            if esm2_embedding_path:
-                self.retrieve_esm2_embeddings(esm2_embedding_path)
+            self.retrieve_esm2_embeddings(esm2_embedding_path)
 
         if UniprotNodeField.NT_EMBEDDING.value in self.node_fields:
             self.data[UniprotNodeField.NT_EMBEDDING.value] = {}
-            if nucleotide_transformer_embedding_path:
-                self.retrieve_nucleotide_transformer_embeddings(
-                    nucleotide_transformer_embedding_path
-                )
+            self.retrieve_nucleotide_transformer_embeddings(
+                nucleotide_transformer_embedding_path
+            )
 
     def _load_json_data(self):
         """Load and parse JSON data from file."""
@@ -526,19 +527,44 @@ class UniprotSwissprot:
     @validate_call
     def download_prott5_embeddings(
         self,
-        prott5_embedding_output_path: FilePath | None = None
+        prott5_embedding_output_path: FilePath | str | None = None
     ):
         """
-        Load ProtT5 embeddings from h5 file.
-        """
-        if not prott5_embedding_output_path or not os.path.isfile(prott5_embedding_output_path):
-            logger.warning("ProtT5 embedding file not found.")
-            return
+        Downloads ProtT5 embedding from uniprot website.
+        If the file exists in the defined file path, then directly reads it.
 
-        logger.info("Loading ProtT5 embeddings...")
+        Args:
+            prott5_embedding_output_path: Path to the h5 file. Defaults to embedding dir.
+        """
+        url: HttpUrl = (
+            "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/embeddings/uniprot_sprot/per-protein.h5"
+        )
+        
+        if prott5_embedding_output_path:
+            full_path = str(prott5_embedding_output_path)
+        else:
+            # Create default embedding directory if it doesn't exist
+            os.makedirs(DEFAULT_EMBEDDING_DIR, exist_ok=True)
+            full_path = os.path.join(DEFAULT_EMBEDDING_DIR, "prott5_protein_embeddings.h5")
+
+        if not os.path.isfile(full_path):
+            logger.info(f"Downloading ProtT5 embeddings to {full_path}...")
+            try:
+                with requests.get(url, stream=True) as response:
+                    response.raise_for_status()
+                    with open(full_path, "wb") as f:
+                        for chunk in response.iter_content(512 * 1024):
+                            if chunk:
+                                f.write(chunk)
+                logger.info("ProtT5 embeddings downloaded successfully.")
+            except Exception as e:
+                logger.error(f"Failed to download ProtT5 embeddings: {e}")
+                return
+        else:
+            logger.info(f"ProtT5 Embedding file exists. Reading from {full_path}...")
 
         df_list = []
-        with h5py.File(prott5_embedding_output_path, "r") as file:
+        with h5py.File(full_path, "r") as file:
             for uniprot_id, embedding in file.items():
                 embedding = np.array(embedding).astype(np.float16)
                 count = np.count_nonzero(~np.isnan(embedding))
@@ -557,17 +583,27 @@ class UniprotSwissprot:
     @validate_call
     def retrieve_esm2_embeddings(
         self,
-        esm2_embedding_path: FilePath | None = None
+        esm2_embedding_path: FilePath | str | None = None
     ) -> None:
-        """Load ESM2 embeddings from h5 file."""
-        if not esm2_embedding_path or not os.path.isfile(esm2_embedding_path):
-            logger.warning("ESM2 embedding file not found.")
+        """
+        Load ESM2 embeddings from h5 file.
+        Note: ESM2 embeddings are not available for download from UniProt,
+        so this method requires a local file path.
+        """
+        if esm2_embedding_path:
+            full_path = str(esm2_embedding_path)
+        else:
+            # Default path for ESM2 embeddings
+            full_path = os.path.join(DEFAULT_EMBEDDING_DIR, "esm2_embeddings.h5")
+
+        if not os.path.isfile(full_path):
+            logger.warning(f"ESM2 embedding file not found at {full_path}. Skipping ESM2 embeddings.")
             return
 
-        logger.info("Loading ESM2 embeddings...")
+        logger.info(f"Loading ESM2 embeddings from {full_path}...")
 
         df_list = []
-        with h5py.File(esm2_embedding_path, "r") as file:
+        with h5py.File(full_path, "r") as file:
             for uniprot_id, embedding in file.items():
                 embedding = np.array(embedding).astype(np.float16)
                 count = np.count_nonzero(~np.isnan(embedding))
@@ -585,17 +621,26 @@ class UniprotSwissprot:
 
     def retrieve_nucleotide_transformer_embeddings(
         self,
-        nucleotide_transformer_embedding_path: FilePath | None = None
+        nucleotide_transformer_embedding_path: FilePath | str | None = None
     ) -> None:
-        """Load Nucleotide Transformer embeddings from h5 file."""
-        if not nucleotide_transformer_embedding_path or not os.path.isfile(nucleotide_transformer_embedding_path):
-            logger.warning("Nucleotide Transformer embedding file not found.")
+        """
+        Load Nucleotide Transformer embeddings from h5 file.
+        Note: NT embeddings require a local file path.
+        """
+        if nucleotide_transformer_embedding_path:
+            full_path = str(nucleotide_transformer_embedding_path)
+        else:
+            # Default path for NT embeddings
+            full_path = os.path.join(DEFAULT_EMBEDDING_DIR, "nt_embeddings.h5")
+
+        if not os.path.isfile(full_path):
+            logger.warning(f"Nucleotide Transformer embedding file not found at {full_path}. Skipping NT embeddings.")
             return
 
-        logger.info("Loading Nucleotide Transformer embeddings...")
+        logger.info(f"Loading Nucleotide Transformer embeddings from {full_path}...")
 
         self.entrez_id_to_nucleotide_transformer_embedding = {}
-        with h5py.File(nucleotide_transformer_embedding_path, "r") as file:
+        with h5py.File(full_path, "r") as file:
             for entrez_id, embedding in file.items():
                 embedding = np.array(embedding).astype(np.float16)
                 self.entrez_id_to_nucleotide_transformer_embedding[entrez_id] = embedding
