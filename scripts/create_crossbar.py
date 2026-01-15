@@ -5,8 +5,16 @@ project_root = Path(__file__).resolve().parent.parent
 # Add parent directory to Python path
 sys.path.insert(0, str(project_root))
 
-from bccb.uniprot_adapter import (
-    Uniprot,
+# Patch pypath settings for compatibility
+try:
+    from pypath.share import settings
+    if not hasattr(settings, 'context') and hasattr(settings, 'settings'):
+        settings.context = settings.settings.context
+except ImportError:
+    pass
+
+from bccb.uniprot_swissprot_adapter import (
+    UniprotSwissprot,
     UniprotNodeType,
     UniprotNodeField,
     UniprotEdgeType,
@@ -63,8 +71,8 @@ from bccb.tfgen_adapter import (
 
 from biocypher import BioCypher
 
-bc = BioCypher(biocypher_config_path= project_root / "config/biocypher_config.yaml",
-               schema_config_path= project_root / "config/schema_config.yaml",
+bc = BioCypher(biocypher_config_path= str(project_root / "config/biocypher_config.yaml"),
+               schema_config_path= str(project_root / "config/schema_config.yaml"),
 )
 
 # Whether to cache data by pypath for future usage
@@ -77,11 +85,11 @@ export_as_csv = True
 TEST_MODE = True
 
 # dirs
-output_dir_path = "YOUR_PATH"
+output_dir_path = "/GenSIvePFS/users/clzeng/workspace/CROssBARv2-KG/biocypher-out"
 
-# user and passwd
-drugbank_user = "YOUR_DRUGBANK_USER"
-drugbank_passwd = "YOUR_DRUGBANK_PASSWD"
+# user and passwd (disabled - no account)
+drugbank_user = ""
+drugbank_passwd = ""
 
 # uniprot configuration
 uniprot_node_types = [
@@ -104,9 +112,9 @@ uniprot_node_fields = [
     UniprotNodeField.KEGG_IDS,
     UniprotNodeField.PROTEOME,
     UniprotNodeField.SEQUENCE,
-    UniprotNodeField.PROTT5_EMBEDDING,
-    UniprotNodeField.ESM2_EMBEDDING,
-    UniprotNodeField.NT_EMBEDDING,
+    # UniprotNodeField.PROTT5_EMBEDDING,  # Disabled: slow to load
+    # UniprotNodeField.ESM2_EMBEDDING,     # Disabled: slow to load
+    # UniprotNodeField.NT_EMBEDDING,       # Disabled: slow to load
 ]
 
 uniprot_edge_types = [
@@ -119,7 +127,8 @@ uniprot_id_type = [
 ]
 
 
-uniprot_adapter = Uniprot(
+uniprot_adapter = UniprotSwissprot(
+        json_path="/GenSIvePFS/users/data/UniProt/UniProtKB_SwissProt/uniprotkb_reviewed_true_2025_11_04.json",
         organism="*",
         node_types=uniprot_node_types,
         node_fields=uniprot_node_fields,
@@ -182,19 +191,18 @@ bc.write_edges(go_adapter.get_go_edges())
 if export_as_csv:
     go_adapter.export_as_csv(path=output_dir_path)
 
-# drug
-
-drug_adapter = Drug(
-    drugbank_user=drugbank_user, 
-    drugbank_passwd=drugbank_passwd,    
-    export_csv=export_as_csv, 
-    output_dir=output_dir_path,
-    test_mode=TEST_MODE
-)
-drug_adapter.download_drug_data(cache=CACHE)
-drug_adapter.process_drug_data()
-bc.write_nodes(drug_adapter.get_drug_nodes())
-bc.write_edges(drug_adapter.get_edges())
+# drug (DISABLED - no drugbank account)
+# drug_adapter = Drug(
+#     drugbank_user=drugbank_user, 
+#     drugbank_passwd=drugbank_passwd,    
+#     export_csv=export_as_csv, 
+#     output_dir=output_dir_path,
+#     test_mode=TEST_MODE
+# )
+# drug_adapter.download_drug_data(cache=CACHE)
+# drug_adapter.process_drug_data()
+# bc.write_nodes(drug_adapter.get_drug_nodes())
+# bc.write_edges(drug_adapter.get_edges())
 
 # compound
 compound_adapter = Compound(

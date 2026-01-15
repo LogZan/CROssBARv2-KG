@@ -49,9 +49,9 @@ uniprot_node_fields = [
     UniprotNodeField.ENTREZ_GENE_IDS,
     UniprotNodeField.SEQUENCE,
     # Uncomment to include embeddings (requires h5 files)
-    # UniprotNodeField.PROTT5_EMBEDDING,
-    # UniprotNodeField.ESM2_EMBEDDING,
-    # UniprotNodeField.NT_EMBEDDING,
+    UniprotNodeField.PROTT5_EMBEDDING,
+    UniprotNodeField.ESM2_EMBEDDING,
+    UniprotNodeField.NT_EMBEDDING,
 ]
 
 uniprot_edge_types = [

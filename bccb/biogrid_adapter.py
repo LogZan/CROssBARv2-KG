@@ -21,6 +21,9 @@ from contextlib import ExitStack
 
 from bioregistry import normalize_curie
 
+from . import cache_config
+cache_config.setup_pypath_cache()
+
 from enum import Enum
 
 global adapter_name

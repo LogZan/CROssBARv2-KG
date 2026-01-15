@@ -1,7 +1,13 @@
-# biocypher module settings
+#  biocypher module settings
 biocypher:
 
   offline: true
+  head_ontology:
+    url: ontology/biolink-model.owl.ttl
+    root_node: entity
+
+
+
 
 neo4j:
 

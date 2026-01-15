@@ -19,6 +19,9 @@ from pydantic import BaseModel, DirectoryPath, validate_call
 from biocypher._logger import logger
 from tqdm import tqdm
 
+from . import cache_config
+cache_config.setup_pypath_cache()
+
 logger.debug(f"Loading module {__name__}.")
 
 

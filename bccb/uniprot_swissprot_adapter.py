@@ -106,6 +106,7 @@ class UniprotNodeField(Enum, metaclass=UniprotEnumMeta):
             cls.ORGANISM.value,
             cls.ORGANISM_ID.value,
             cls.SEQUENCE.value,
+            cls.SUBCELLULAR_LOCATION.value,
             cls.PROTT5_EMBEDDING.value,
             cls.ESM2_EMBEDDING.value,
         ]
@@ -515,8 +516,8 @@ class UniprotSwissprot:
                 ensg_id = ensg_id[0] if ensg_id else None
                 if ensg_id:
                     ensg_ids.add(ensg_id)
-        except ImportError:
-            # pypath not available, skip ENSG mapping
+        except Exception:
+            # pypath not available or has dependency issues, skip ENSG mapping
             pass
 
         ensg_ids = list(ensg_ids)

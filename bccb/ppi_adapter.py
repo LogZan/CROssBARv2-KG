@@ -23,6 +23,9 @@ from bioregistry import normalize_curie
 
 from enum import Enum, EnumMeta
 
+from . import cache_config
+cache_config.setup_pypath_cache()
+
 
 class PPIEnumMeta(EnumMeta):
     def __contains__(cls, item):
@@ -398,8 +401,13 @@ class PPI:
         )
 
         # download these fields for mapping from gene symbol to uniprot id
-        self.uniprot_to_gene = uniprot.uniprot_data("gene_names", "*", True)
-        self.uniprot_to_tax = uniprot.uniprot_data("organism_id", "*", True)
+        try:
+            self.uniprot_to_gene = uniprot.uniprot_data("gene_names", "*", True)
+            self.uniprot_to_tax = uniprot.uniprot_data("organism_id", "*", True)
+        except (ValueError, AttributeError) as e:
+            logger.warning(f"Failed to download uniprot gene/tax mapping data: {e}. Using empty mappings.")
+            self.uniprot_to_gene = {}
+            self.uniprot_to_tax = {}
 
         t1 = time()
         logger.info(
@@ -517,11 +525,18 @@ class PPI:
         # rename columns
         biogrid_df.rename(columns=self.biogrid_field_new_names, inplace=True)
 
+        # Convert to string and drop rows with None/NaN values first
+        biogrid_df = biogrid_df.dropna(subset=["uniprot_a", "uniprot_b"]).reset_index(drop=True)
+        
+        # Ensure columns are string type
+        biogrid_df["uniprot_a"] = biogrid_df["uniprot_a"].astype(str)
+        biogrid_df["uniprot_b"] = biogrid_df["uniprot_b"].astype(str)
+        
         # drop rows that have semicolon (";")
         biogrid_df.drop(
             biogrid_df[
-                (biogrid_df["uniprot_a"].str.contains(";"))
-                | (biogrid_df["uniprot_b"].str.contains(";"))
+                (biogrid_df["uniprot_a"].str.contains(";", na=False))
+                | (biogrid_df["uniprot_b"].str.contains(";", na=False))
             ].index,
             axis=0,
             inplace=True,
@@ -610,7 +625,11 @@ class PPI:
             self.tax_ids = [self.organism]
 
         # map string ids to swissprot ids
-        uniprot_to_string = uniprot.uniprot_data("xref_string", "*", True)
+        try:
+            uniprot_to_string = uniprot.uniprot_data("xref_string", "*", True)
+        except (ValueError, AttributeError) as e:
+            logger.warning(f"Failed to download uniprot-string mapping: {e}. Using empty mapping.")
+            uniprot_to_string = {}
 
         self.string_to_uniprot = collections.defaultdict(list)
         for k, v in uniprot_to_string.items():
@@ -630,10 +649,24 @@ class PPI:
             "8032",
         ]
 
-        # it may take around 100 hours to download whole data
-        for tax in tqdm(self.tax_ids):
-            if tax not in tax_ids_to_be_skipped:
-                # remove proteins that does not have swissprot ids
+        # Filter out problematic tax IDs
+        valid_tax_ids = [tax for tax in self.tax_ids if tax not in tax_ids_to_be_skipped]
+        
+        # In test mode, only download a subset
+        # if self.test_mode:
+        #     valid_tax_ids = valid_tax_ids[:10]  # Only process first 10 species in test mode
+        #     logger.info(f"Test mode: limiting to first 10 species out of {len(self.tax_ids)} total")
+
+        # Parallel download function
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from threading import Lock
+        
+        results_lock = Lock()
+        self.string_ints = []
+        
+        def download_single_species(tax):
+            """Download STRING data for a single species"""
+            try:
                 organism_string_ints = [
                     i
                     for i in string.string_links_interactions(
@@ -643,15 +676,30 @@ class PPI:
                     if i.protein_a in self.string_to_uniprot
                     and i.protein_b in self.string_to_uniprot
                 ]
-
-                logger.debug(
-                    f"Downloaded STRING data with taxonomy id {str(tax)}, filtered interaction count for this tax id is {len(organism_string_ints)}"
-                )
-
+                
+                return (tax, organism_string_ints)
+            except Exception as e:
+                logger.warning(f"Failed to download STRING data for tax_id {tax}: {e}")
+                return (tax, [])
+        
+        # Use parallel downloads with up to 8 workers
+        max_workers = min(8, len(valid_tax_ids))
+        logger.info(f"Downloading STRING data for {len(valid_tax_ids)} species using {max_workers} parallel workers...")
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all download tasks
+            future_to_tax = {executor.submit(download_single_species, tax): tax for tax in valid_tax_ids}
+            
+            # Process completed downloads with progress bar
+            for future in tqdm(as_completed(future_to_tax), total=len(valid_tax_ids), desc="Downloading STRING"):
+                tax, organism_string_ints = future.result()
+                
                 if organism_string_ints:
-                    self.string_ints.extend(organism_string_ints)
+                    with results_lock:
+                        self.string_ints.extend(organism_string_ints)
+                    
                     logger.debug(
-                        f"Total interaction count is {len(self.string_ints)}"
+                        f"Downloaded STRING data for tax_id {tax}: {len(organism_string_ints)} interactions (total: {len(self.string_ints)})"
                     )
 
         t1 = time()

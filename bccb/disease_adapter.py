@@ -40,6 +40,9 @@ from enum import Enum, EnumMeta, auto
 import numpy as np
 import pandas as pd
 
+from . import cache_config
+cache_config.setup_pypath_cache()
+
 logger.debug(f"Loading module {__name__}.")
 
 

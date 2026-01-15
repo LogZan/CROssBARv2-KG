@@ -25,6 +25,9 @@ from enum import Enum, EnumMeta, auto
 import pandas as pd
 import numpy as np
 
+from . import cache_config
+cache_config.setup_pypath_cache()
+
 
 class PathwayEnumMeta(EnumMeta):
     def __contains__(cls, item):

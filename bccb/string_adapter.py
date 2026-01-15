@@ -23,6 +23,9 @@ from bioregistry import normalize_curie
 
 from enum import Enum
 
+from . import cache_config
+cache_config.setup_pypath_cache()
+
 global adapter_name
 adapter_name = "string" # might be useful for future
     

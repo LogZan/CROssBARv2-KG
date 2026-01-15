@@ -20,6 +20,9 @@ from biocypher._logger import logger
 
 from pydantic import BaseModel, DirectoryPath, EmailStr, validate_call
 
+from . import cache_config
+cache_config.setup_pypath_cache()
+
 logger.debug(f"Loading module {__name__}.")
 
 

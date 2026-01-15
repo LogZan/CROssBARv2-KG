@@ -19,6 +19,9 @@ from time import time
 import pandas as pd
 import numpy as np
 
+from . import cache_config
+cache_config.setup_pypath_cache()
+
 
 class TFGeneEnumMeta(EnumMeta):
     def __contains__(cls, item):

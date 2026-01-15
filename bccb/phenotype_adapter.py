@@ -22,6 +22,9 @@ from typing import Union
 import pandas as pd
 import numpy as np
 
+from . import cache_config
+cache_config.setup_pypath_cache()
+
 logger.debug(f"Loading module {__name__}.")
 
 
