@@ -10,12 +10,14 @@ from pypath.inputs import (
     dgidb,
     pharos,
     ctdbase,
-    unichem,
     ddinter,
 )
-# Use compatibility layer for chembl
+# Use compatibility layer for chembl and unichem
 from . import pypath_compat as chembl_compat
+from . import pypath_compat  # For unichem_mapping
 from . import kegg_local
+# Use memory-efficient streaming parser for DrugBank
+from .drugbank_streaming import DrugbankStreaming
 from contextlib import ExitStack
 from typing import Literal, Union, Optional
 from bioregistry import normalize_curie
@@ -333,7 +335,7 @@ class Drug:
 
         with ExitStack() as stack:
 
-            stack.enter_context(settings.context(retries=retries))
+            stack.enter_context(settings.settings.context(retries=retries))
 
             if debug:
                 stack.enter_context(curl.debug_on())
@@ -430,8 +432,8 @@ class Drug:
         logger.debug("Downloading Drugbank drug node data")
         t0 = time()
 
-        # Drugbank Object
-        self.drugbank_data = drugbank.DrugbankFull(
+        # Drugbank Object - use streaming parser to avoid OOM
+        self.drugbank_data = DrugbankStreaming(
             user=self.user, passwd=self.passwd
         )
 
@@ -538,7 +540,7 @@ class Drug:
         t0 = time()
 
         if not hasattr(self, "drugbank_data"):
-            self.drugbank_data = drugbank.DrugbankFull(
+            self.drugbank_data = DrugbankStreaming(
                 user=self.user, passwd=self.passwd
             )
 
@@ -576,7 +578,7 @@ class Drug:
 
         if not hasattr(self, "drugbank_drugs_external_ids"):
             if not hasattr(self, "drugbank_data"):
-                self.drugbank_data = drugbank.DrugbankFull(
+                self.drugbank_data = DrugbankStreaming(
                     user=self.user, passwd=self.passwd
                 )
 
@@ -586,7 +588,7 @@ class Drug:
 
         if not hasattr(self, "drugbank_drugs_detailed"):
             if not hasattr(self, "drugbank_data"):
-                self.drugbank_data = drugbank.DrugbankFull(
+                self.drugbank_data = DrugbankStreaming(
                     user=self.user, passwd=self.passwd
                 )
 
@@ -618,7 +620,7 @@ class Drug:
                     
                 logger.debug(f"Loading UniChem mapping: {field_name}")
                 try:
-                    mapping = unichem.unichem_mapping(src, tgt)
+                    mapping = pypath_compat.unichem_mapping(src, tgt)
                     if needs_inversion:
                         mapping = {list(v)[0]: k for k, v in mapping.items()}
                     
@@ -643,25 +645,25 @@ class Drug:
                         unichem_drugs_id_mappings[k][field_name] = None
         else:
             # Original behavior: load all mappings at once
-            unichem_drugbank_to_zinc_mapping = unichem.unichem_mapping(
+            unichem_drugbank_to_zinc_mapping = pypath_compat.unichem_mapping(
                 "drugbank", "zinc"
             )
-            unichem_drugbank_to_chembl_mapping = unichem.unichem_mapping(
+            unichem_drugbank_to_chembl_mapping = pypath_compat.unichem_mapping(
                 "chembl", "drugbank"
             )
             unichem_drugbank_to_chembl_mapping = {
                 list(v)[0]: k for k, v in unichem_drugbank_to_chembl_mapping.items()
             }
-            unichem_drugbank_to_bindingdb_mapping = unichem.unichem_mapping(
+            unichem_drugbank_to_bindingdb_mapping = pypath_compat.unichem_mapping(
                 "drugbank", "bindingdb"
             )
-            unichem_drugbank_to_clinicaltrials_mapping = unichem.unichem_mapping(
+            unichem_drugbank_to_clinicaltrials_mapping = pypath_compat.unichem_mapping(
                 "drugbank", "clinicaltrials"
             )
-            unichem_drugbank_to_chebi_mapping = unichem.unichem_mapping(
+            unichem_drugbank_to_chebi_mapping = pypath_compat.unichem_mapping(
                 "drugbank", "chebi"
             )
-            unichem_drugbank_to_pubchem_mapping = unichem.unichem_mapping(
+            unichem_drugbank_to_pubchem_mapping = pypath_compat.unichem_mapping(
                 "drugbank", "pubchem"
             )
 
@@ -703,7 +705,7 @@ class Drug:
         )
 
         # create drugbank-drugcentral, drugcentral-drugbank, chembl-drugbank mappings that will be used for the future processes
-        chembl_to_drugbank = unichem.unichem_mapping("chembl", "drugbank")
+        chembl_to_drugbank = pypath_compat.unichem_mapping("chembl", "drugbank")
         self.chembl_to_drugbank = {
             k: list(v)[0] for k, v in chembl_to_drugbank.items()
         }
@@ -1367,11 +1369,35 @@ class Drug:
         logger.debug("Downloading Chembl DTI data")
         t0 = time()
 
-        self.chembl_acts = list(chembl_compat.chembl_activities(standard_relation="="))
-        self.chembl_document_to_pubmed = chembl_compat.chembl_documents()
-        self.chembl_targets = list(chembl_compat.chembl_targets())
-        self.chembl_assays = list(chembl_compat.chembl_assays())
-        self.chembl_mechanisms = list(chembl_compat.chembl_mechanisms())
+        try:
+            self.chembl_acts = list(chembl_compat.chembl_activities(standard_relation="="))
+        except Exception as e:
+            logger.warning(f"ChemBL activities download failed: {e}")
+            self.chembl_acts = []
+        
+        try:
+            self.chembl_document_to_pubmed = chembl_compat.chembl_documents()
+        except Exception as e:
+            logger.warning(f"ChemBL documents download failed: {e}")
+            self.chembl_document_to_pubmed = {}
+        
+        try:
+            self.chembl_targets = list(chembl_compat.chembl_targets())
+        except Exception as e:
+            logger.warning(f"ChemBL targets download failed: {e}")
+            self.chembl_targets = []
+        
+        try:
+            self.chembl_assays = list(chembl_compat.chembl_assays())
+        except Exception as e:
+            logger.warning(f"ChemBL assays download failed: {e}")
+            self.chembl_assays = []
+        
+        try:
+            self.chembl_mechanisms = list(chembl_compat.chembl_mechanisms())
+        except Exception as e:
+            logger.warning(f"ChemBL mechanisms download failed: {e}")
+            self.chembl_mechanisms = []
 
         if not hasattr(self, "chembl_to_drugbank"):
             self.get_external_database_mappings()
@@ -1708,7 +1734,7 @@ class Drug:
         else:
 
             self.pubchem_to_drugbank = {}
-            for k, v in unichem.unichem_mapping("drugbank", "pubchem").items():
+            for k, v in pypath_compat.unichem_mapping("drugbank", "pubchem").items():
                 if len(v) > 1:
                     for value in list(v):
                         self.pubchem_to_drugbank[value] = k

@@ -10,11 +10,11 @@ from pypath.inputs import (
     opentargets,
     drugbank,
     uniprot,
-    unichem,
     humsavar,
 )
-# Use compatibility layer for chembl
+# Use compatibility layer for chembl and unichem
 from . import pypath_compat as chembl_compat
+from . import pypath_compat  # For unichem_mapping
 from . import kegg_local
 from . import disgenet_local as disgenet
 import json
@@ -273,7 +273,7 @@ class Disease:
         """
 
         with ExitStack() as stack:
-            stack.enter_context(settings.context(retries=retries))
+            stack.enter_context(settings.settings.context(retries=retries))
 
             if debug:
                 stack.enter_context(curl.debug_on())
@@ -399,7 +399,7 @@ class Disease:
 
             self.chembl_to_drugbank = {
                 k: list(v)[0]
-                for k, v in unichem.unichem_mapping(
+                for k, v in pypath_compat.unichem_mapping(
                     "chembl", "drugbank"
                 ).items()
             }

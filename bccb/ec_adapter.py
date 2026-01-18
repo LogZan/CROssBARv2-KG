@@ -120,7 +120,7 @@ class EC:
         """
 
         with ExitStack() as stack:
-            stack.enter_context(settings.context(retries=retries))
+            stack.enter_context(settings.settings.context(retries=retries))
 
             if debug:
                 stack.enter_context(curl.debug_on())

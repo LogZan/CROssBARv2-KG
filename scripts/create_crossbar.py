@@ -6,6 +6,11 @@ project_root = Path(__file__).resolve().parent.parent
 # Add parent directory to Python path
 sys.path.insert(0, str(project_root))
 
+# CRITICAL: Setup pypath cache directory FIRST before any pypath imports
+# This ensures all temp files go to the large filesystem, not /tmp or /root
+from bccb import cache_config
+cache_config.setup_pypath_cache()
+
 # Patch pypath settings for compatibility
 try:
     from pypath.share import settings
@@ -35,7 +40,8 @@ from bccb.go_adapter import (
 )
 
 from bccb.drug_adapter import (
-    Drug
+    Drug,
+    DrugNodeField,
 )
 
 from bccb.compound_adapter import (
@@ -208,9 +214,12 @@ finally:
 
 # drug - with memory optimization
 try:
+    # Exclude SELFORMER_EMBEDDING (requires external file path)
+    drug_node_fields = [f for f in DrugNodeField if f != DrugNodeField.SELFORMER_EMBEDDING]
     drug_adapter = Drug(
         drugbank_user=drugbank_user, 
-        drugbank_passwd=drugbank_passwd,    
+        drugbank_passwd=drugbank_passwd,
+        node_fields=drug_node_fields,
         export_csv=export_as_csv, 
         output_dir=output_dir_path,
         test_mode=TEST_MODE,

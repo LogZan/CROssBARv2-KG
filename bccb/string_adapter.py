@@ -100,7 +100,7 @@ class STRING:
 
         with ExitStack() as stack:
             
-            stack.enter_context(settings.context(retries=self.retries))
+            stack.enter_context(settings.settings.context(retries=self.retries))
             
             if self.debug:                
                 stack.enter_context(curl.debug_on())

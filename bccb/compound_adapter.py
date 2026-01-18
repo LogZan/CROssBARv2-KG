@@ -7,9 +7,10 @@ import h5py
 import gzip
 
 from pypath.share import curl, settings, common
-from pypath.inputs import stitch, uniprot, unichem, string
-# Use compatibility layer for chembl
+from pypath.inputs import stitch, uniprot, string
+# Use compatibility layer for chembl and unichem
 from . import pypath_compat as chembl_compat
+from . import pypath_compat  # For unichem_mapping
 from contextlib import ExitStack
 from bioregistry import normalize_curie
 
@@ -192,7 +193,7 @@ class Compound:
         """
         with ExitStack() as stack:
 
-            stack.enter_context(settings.context(retries=retries))
+            stack.enter_context(settings.settings.context(retries=retries))
 
             if debug:
                 stack.enter_context(curl.debug_on())
@@ -290,7 +291,7 @@ class Compound:
         gc.collect()
 
         # chembl to drugbank mapping
-        chembl_to_drugbank_raw = unichem.unichem_mapping("chembl", "drugbank")
+        chembl_to_drugbank_raw = pypath_compat.unichem_mapping("chembl", "drugbank")
         self.chembl_to_drugbank = {
             k: list(v)[0] for k, v in chembl_to_drugbank_raw.items()
         }
@@ -444,7 +445,7 @@ class Compound:
         del uniprot_to_string
         gc.collect()
 
-        chembl_to_pubchem = unichem.unichem_mapping("chembl", "pubchem")
+        chembl_to_pubchem = pypath_compat.unichem_mapping("chembl", "pubchem")
         self.pubchem_to_chembl = {}
         for k, v in chembl_to_pubchem.items():
             if len(v) > 1:
@@ -456,7 +457,7 @@ class Compound:
         del chembl_to_pubchem
         gc.collect()
 
-        drugbank_to_pubchem = unichem.unichem_mapping("drugbank", "pubchem")
+        drugbank_to_pubchem = pypath_compat.unichem_mapping("drugbank", "pubchem")
         self.pubchem_to_drugbank = {}
         for k, v in drugbank_to_pubchem.items():
             if len(v) > 1:

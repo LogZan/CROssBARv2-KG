@@ -14,6 +14,80 @@ try:
 except ImportError:
     chembl = None
 
+try:
+    from pypath.inputs import unichem as unichem_module
+except ImportError:
+    unichem_module = None
+
+
+# UniChem ID type mapping (name -> numeric ID)
+UNICHEM_ID_TYPES = {
+    'chembl': 1,
+    'drugbank': 2,
+    'pdb': 3,
+    'gtopdb': 4,
+    'pubchem_dotf': 5,
+    'kegg': 6,
+    'chebi': 7,
+    'nih_ncc': 8,
+    'zinc': 9,
+    'emolecules': 10,
+    'atlas': 12,
+    'fda_srs': 14,
+    'surechembl': 15,
+    'pharmgkb': 17,
+    'hmdb': 18,
+    'selleck': 20,
+    'pubchem_tp': 21,
+    'pubchem': 22,
+    'mcule': 23,
+    'nmrshiftdb': 24,
+    'lincs': 25,
+    'actor': 26,
+    'recon': 27,
+    'molport': 28,
+    'nikkaji': 29,
+    'bindingdb': 31,
+    'epa_comptox': 32,
+    'lipidmaps': 33,
+    'drugcentral': 34,
+    'carotenoiddb': 35,
+    'metabolights': 36,
+    'brenda': 37,
+    'rhea': 38,
+    'chemicalbook': 39,
+    'swisslipids': 41,
+    'dailymed': 45,
+    'clinicaltrials': 46,
+    'rxnorm': 47,
+    'medchemexpress': 48,
+    'probesdrugs': 49,
+    'ccdc': 50,
+}
+
+
+def unichem_mapping(id_type_a, id_type_b):
+    """
+    Get UniChem ID mapping between two databases.
+    
+    Accepts both string names (old API) and numeric IDs (new API).
+    """
+    if unichem_module is None:
+        raise ImportError("pypath.inputs.unichem not available")
+    
+    # Convert string names to numeric IDs if needed
+    if isinstance(id_type_a, str):
+        id_type_a = UNICHEM_ID_TYPES.get(id_type_a.lower())
+        if id_type_a is None:
+            raise ValueError(f"Unknown UniChem ID type: {id_type_a}")
+    
+    if isinstance(id_type_b, str):
+        id_type_b = UNICHEM_ID_TYPES.get(id_type_b.lower())
+        if id_type_b is None:
+            raise ValueError(f"Unknown UniChem ID type: {id_type_b}")
+    
+    return unichem_module.unichem_mapping(id_type_a, id_type_b)
+
 
 # Define namedtuples that match the OLD API structure for backward compatibility
 # These will be populated from new API data
@@ -95,24 +169,28 @@ def chembl_activities(standard_relation=None, max_pages=None):
     if _has_new_api():
         # New API: chembl.activity()
         logger.debug("Using new pypath API: chembl.activity()")
-        for act in chembl.activity(max_pages=max_pages):
-            # Filter by standard_relation if specified
-            if standard_relation and act.standard_relation != standard_relation:
-                continue
-            
-            # Convert to old format
-            yield OldChemblActivity(
-                chembl=act.molecule_chembl_id,
-                target_chembl=act.target_chembl_id,
-                assay_chembl=act.assay_id,
-                document=act.document_chembl_id,
-                standard_type=act.standard_type,
-                standard_relation=act.standard_relation,
-                standard_value=act.standard_value,
-                standard_units=act.standard_units,
-                pchembl=act.pchembl_value,
-                activity_id=act.activity_id,
-            )
+        try:
+            for act in chembl.activity(max_pages=max_pages):
+                # Filter by standard_relation if specified
+                if standard_relation and act.standard_relation != standard_relation:
+                    continue
+                
+                # Convert to old format
+                yield OldChemblActivity(
+                    chembl=act.molecule_chembl_id,
+                    target_chembl=act.target_chembl_id,
+                    assay_chembl=act.assay_id,
+                    document=act.document_chembl_id,
+                    standard_type=act.standard_type,
+                    standard_relation=act.standard_relation,
+                    standard_value=act.standard_value,
+                    standard_units=act.standard_units,
+                    pchembl=act.pchembl_value,
+                    activity_id=act.activity_id,
+                )
+        except (AttributeError, TypeError) as e:
+            logger.warning(f"ChemBL activity download failed: {e}. Returning empty results.")
+            return
     else:
         # Old API: chembl.chembl_activities()
         logger.debug("Using old pypath API: chembl.chembl_activities()")
