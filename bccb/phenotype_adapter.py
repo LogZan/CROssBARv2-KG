@@ -190,6 +190,12 @@ class HPO:
         logger.info("Retrieving CADA phenotype embeddings.")
 
         self.hpo_id_to_cada_embedding = {}
+        
+        # Check if path is provided
+        if cada_embedding_path is None:
+            logger.warning("No CADA embedding path provided, skipping embedding retrieval")
+            return
+            
         with h5py.File(cada_embedding_path, "r") as f:
             for hpo_id, embedding in f.items():
                 self.hpo_id_to_cada_embedding[hpo_id] = np.array(embedding).astype(np.float16)

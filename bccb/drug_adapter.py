@@ -11,9 +11,10 @@ from pypath.inputs import (
     pharos,
     ctdbase,
     unichem,
-    chembl,
     ddinter,
 )
+# Use compatibility layer for chembl
+from . import pypath_compat as chembl_compat
 from . import kegg_local
 from contextlib import ExitStack
 from typing import Literal, Union, Optional
@@ -22,6 +23,7 @@ from tqdm import tqdm
 from time import time
 
 import os
+import gc
 import collections
 import h5py
 import gzip
@@ -184,6 +186,7 @@ class DrugModel(BaseModel):
     test_mode: bool = False
     export_csv: bool = False
     output_dir: DirectoryPath | None = None
+    low_memory_mode: bool = False
 
 
 class Drug:
@@ -210,6 +213,7 @@ class Drug:
         test_mode: Optional[bool] = False,
         export_csv: Optional[bool] = False,
         output_dir: Optional[DirectoryPath | None] = None,
+        low_memory_mode: Optional[bool] = False,
     ):
         """
         Args:
@@ -224,6 +228,7 @@ class Drug:
             test_mode: if True, limits amount of output data
             export_csv: if True, export data as csv
             output_dir: Location of csv export if `export_csv` is True, if not defined it will be current directory
+            low_memory_mode: if True, uses memory-efficient processing (lazy loading, cleanup after each step)
         """
 
         model = DrugModel(
@@ -238,6 +243,7 @@ class Drug:
             test_mode=test_mode,
             export_csv=export_csv,
             output_dir=output_dir,
+            low_memory_mode=low_memory_mode,
         ).model_dump()
 
         self.user = model["drugbank_user"]
@@ -245,10 +251,10 @@ class Drug:
         self.add_prefix = model["add_prefix"]
         self.export_csv = model["export_csv"]
         self.output_dir = model["output_dir"]
+        self.low_memory_mode = model["low_memory_mode"]
 
-        self.swissprots = set(
-            uniprot._all_uniprots(organism="*", swissprot=True)
-        )
+        # Lazy load swissprots only when needed (memory optimization)
+        self._swissprots = None
 
         # set node fields
         self.set_node_fields(node_fields=model["node_fields"])
@@ -267,6 +273,45 @@ class Drug:
         self.early_stopping = None
         if model["test_mode"]:
             self.early_stopping = 100
+
+    @property
+    def swissprots(self):
+        """Lazy load swissprots to reduce memory usage at initialization."""
+        if self._swissprots is None:
+            logger.debug("Loading SwissProt IDs (lazy load)...")
+            self._swissprots = set(
+                uniprot._all_uniprots(organism="*", swissprot=True)
+            )
+            logger.debug(f"Loaded {len(self._swissprots)} SwissProt IDs")
+        return self._swissprots
+
+    @swissprots.setter
+    def swissprots(self, value):
+        """Allow setting swissprots directly."""
+        self._swissprots = value
+
+    def cleanup_memory(self, attributes_to_clear: list = None):
+        """
+        Clean up memory by clearing specified attributes and forcing garbage collection.
+        
+        Args:
+            attributes_to_clear: List of attribute names to clear. If None, clears common large data structures.
+        """
+        if attributes_to_clear is None:
+            attributes_to_clear = [
+                'chembl_acts', 'chembl_targets', 'chembl_assays', 
+                'chembl_mechanisms', 'chembl_document_to_pubmed',
+                'drugbank_dti', 'dgidb_dti', 'stitch_ints',
+                'unichem_external_fields_dict',
+            ]
+        
+        for attr in attributes_to_clear:
+            if hasattr(self, attr):
+                delattr(self, attr)
+                logger.debug(f"Cleared attribute: {attr}")
+        
+        gc.collect()
+        logger.debug("Memory cleanup completed")
 
     @validate_call
     def download_drug_data(
@@ -513,7 +558,11 @@ class Drug:
         )
 
     def get_external_database_mappings(self):
-        logger.debug("Createing external database mappings")
+        """
+        Create external database mappings. In low_memory_mode, loads UniChem mappings 
+        one at a time and cleans up after each to reduce peak memory usage.
+        """
+        logger.debug("Creating external database mappings")
 
         if not hasattr(self, "unichem_external_fields"):
             self.unichem_external_fields = (
@@ -545,55 +594,103 @@ class Drug:
                 self.drugbank_data.drugbank_drugs_full(fields=["cas_number"])
             )
 
-        # create dictionaries for every unichem external fields
-        unichem_drugbank_to_zinc_mapping = unichem.unichem_mapping(
-            "drugbank", "zinc"
-        )
-        unichem_drugbank_to_chembl_mapping = unichem.unichem_mapping(
-            "chembl", "drugbank"
-        )
-        unichem_drugbank_to_chembl_mapping = {
-            list(v)[0]: k for k, v in unichem_drugbank_to_chembl_mapping.items()
-        }
-        unichem_drugbank_to_bindingdb_mapping = unichem.unichem_mapping(
-            "drugbank", "bindingdb"
-        )
-        unichem_drugbank_to_clinicaltrials_mapping = unichem.unichem_mapping(
-            "drugbank", "clinicaltrials"
-        )
-        unichem_drugbank_to_chebi_mapping = unichem.unichem_mapping(
-            "drugbank", "chebi"
-        )
-        unichem_drugbank_to_pubchem_mapping = unichem.unichem_mapping(
-            "drugbank", "pubchem"
-        )
+        # Initialize unichem_external_fields_dict
+        self.unichem_external_fields_dict = {}
+        
+        # In low_memory_mode, load UniChem mappings one at a time
+        if self.low_memory_mode:
+            logger.info("Using low memory mode for UniChem mappings")
+            unichem_drugs_id_mappings = collections.defaultdict(dict)
+            
+            # Define mapping configurations
+            unichem_mapping_configs = [
+                ("zinc", "drugbank", "zinc", False),
+                ("chembl", "chembl", "drugbank", True),  # needs inversion
+                ("bindingdb", "drugbank", "bindingdb", False),
+                ("clinicaltrials", "drugbank", "clinicaltrials", False),
+                ("chebi", "drugbank", "chebi", False),
+                ("pubchem", "drugbank", "pubchem", False),
+            ]
+            
+            for field_name, src, tgt, needs_inversion in unichem_mapping_configs:
+                if field_name not in self.unichem_external_fields:
+                    continue
+                    
+                logger.debug(f"Loading UniChem mapping: {field_name}")
+                try:
+                    mapping = unichem.unichem_mapping(src, tgt)
+                    if needs_inversion:
+                        mapping = {list(v)[0]: k for k, v in mapping.items()}
+                    
+                    # Store for pubchem (needed by STITCH)
+                    if field_name == "pubchem":
+                        self.unichem_external_fields_dict["pubchem"] = mapping
+                    
+                    # Apply mapping to drugs
+                    for k in self.drugbank_drugs_external_ids.keys():
+                        value = mapping.get(k, None)
+                        if value and field_name != "chembl":
+                            value = list(value)[0] if isinstance(value, set) else value
+                        unichem_drugs_id_mappings[k][field_name] = value
+                    
+                    # Clear mapping to free memory
+                    del mapping
+                    gc.collect()
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to load UniChem mapping for {field_name}: {e}")
+                    for k in self.drugbank_drugs_external_ids.keys():
+                        unichem_drugs_id_mappings[k][field_name] = None
+        else:
+            # Original behavior: load all mappings at once
+            unichem_drugbank_to_zinc_mapping = unichem.unichem_mapping(
+                "drugbank", "zinc"
+            )
+            unichem_drugbank_to_chembl_mapping = unichem.unichem_mapping(
+                "chembl", "drugbank"
+            )
+            unichem_drugbank_to_chembl_mapping = {
+                list(v)[0]: k for k, v in unichem_drugbank_to_chembl_mapping.items()
+            }
+            unichem_drugbank_to_bindingdb_mapping = unichem.unichem_mapping(
+                "drugbank", "bindingdb"
+            )
+            unichem_drugbank_to_clinicaltrials_mapping = unichem.unichem_mapping(
+                "drugbank", "clinicaltrials"
+            )
+            unichem_drugbank_to_chebi_mapping = unichem.unichem_mapping(
+                "drugbank", "chebi"
+            )
+            unichem_drugbank_to_pubchem_mapping = unichem.unichem_mapping(
+                "drugbank", "pubchem"
+            )
 
-        # store above dicts in a unified dict
-        self.unichem_external_fields_dict = {
-            "zinc": unichem_drugbank_to_zinc_mapping,
-            "chembl": unichem_drugbank_to_chembl_mapping,
-            "bindingdb": unichem_drugbank_to_bindingdb_mapping,
-            "clinicaltrials": unichem_drugbank_to_clinicaltrials_mapping,
-            "chebi": unichem_drugbank_to_chebi_mapping,
-            "pubchem": unichem_drugbank_to_pubchem_mapping,
-        }
+            # store above dicts in a unified dict
+            self.unichem_external_fields_dict = {
+                "zinc": unichem_drugbank_to_zinc_mapping,
+                "chembl": unichem_drugbank_to_chembl_mapping,
+                "bindingdb": unichem_drugbank_to_bindingdb_mapping,
+                "clinicaltrials": unichem_drugbank_to_clinicaltrials_mapping,
+                "chebi": unichem_drugbank_to_chebi_mapping,
+                "pubchem": unichem_drugbank_to_pubchem_mapping,
+            }
 
-        # arrange unichem dict for selected unichem fields
-        for field in list(self.unichem_external_fields_dict.keys()):
-            if field not in self.unichem_external_fields:
-                del self.unichem_external_fields_dict[field]
+            # arrange unichem dict for selected unichem fields
+            for field in list(self.unichem_external_fields_dict.keys()):
+                if field not in self.unichem_external_fields:
+                    del self.unichem_external_fields_dict[field]
 
-        unichem_drugs_id_mappings = collections.defaultdict(dict)
-        for k in self.drugbank_drugs_external_ids.keys():
-            for (
-                field_name,
-                field_dict,
-            ) in self.unichem_external_fields_dict.items():
-                mapping = field_dict.get(k, None)
-                if mapping and field_name != "chembl":
-                    mapping = list(mapping)[0]
+            unichem_drugs_id_mappings = collections.defaultdict(dict)
+            for k in self.drugbank_drugs_external_ids.keys():
+                for (
+                    field_name,
+                    field_dict,
+                ) in self.unichem_external_fields_dict.items():
+                    mapping = field_dict.get(k, None)
+                    if mapping and field_name != "chembl":
+                        mapping = list(mapping)[0]
 
-                unichem_drugs_id_mappings[k][field_name] = mapping
+                    unichem_drugs_id_mappings[k][field_name] = mapping
 
         # get drugcentral mappings
         self.cas_to_drugbank = {
@@ -610,6 +707,8 @@ class Drug:
         self.chembl_to_drugbank = {
             k: list(v)[0] for k, v in chembl_to_drugbank.items()
         }
+        del chembl_to_drugbank
+        gc.collect()
 
         # create kegg-drugbank mapping
         self.kegg_to_drugbank = {
@@ -647,6 +746,12 @@ class Drug:
             }
             unichem_mappings = unichem_drugs_id_mappings[k]
             self.drug_mappings_dict[k] = drugbank_mappings | unichem_mappings
+        
+        # Clean up intermediate data in low memory mode
+        if self.low_memory_mode:
+            del unichem_drugs_id_mappings
+            gc.collect()
+            logger.debug("Cleaned up intermediate mapping data")
 
     def process_drugbank_dti_data(self) -> pd.DataFrame:
 
@@ -1262,11 +1367,11 @@ class Drug:
         logger.debug("Downloading Chembl DTI data")
         t0 = time()
 
-        self.chembl_acts = chembl.chembl_activities(standard_relation="=")
-        self.chembl_document_to_pubmed = chembl.chembl_documents()
-        self.chembl_targets = chembl.chembl_targets()
-        self.chembl_assays = chembl.chembl_assays()
-        self.chembl_mechanisms = chembl.chembl_mechanisms()
+        self.chembl_acts = list(chembl_compat.chembl_activities(standard_relation="="))
+        self.chembl_document_to_pubmed = chembl_compat.chembl_documents()
+        self.chembl_targets = list(chembl_compat.chembl_targets())
+        self.chembl_assays = list(chembl_compat.chembl_assays())
+        self.chembl_mechanisms = list(chembl_compat.chembl_mechanisms())
 
         if not hasattr(self, "chembl_to_drugbank"):
             self.get_external_database_mappings()
@@ -1400,6 +1505,15 @@ class Drug:
         logger.info(
             f"Chembl DTI data is processed in {round((t1-t0) / 60, 2)} mins"
         )
+
+        # Clean up ChEMBL raw data in low memory mode
+        if self.low_memory_mode:
+            for attr in ['chembl_acts', 'chembl_targets', 'chembl_assays', 
+                         'chembl_mechanisms', 'chembl_document_to_pubmed']:
+                if hasattr(self, attr):
+                    delattr(self, attr)
+            gc.collect()
+            logger.debug("Cleaned up ChEMBL raw data")
 
         return chembl_dti_df
 

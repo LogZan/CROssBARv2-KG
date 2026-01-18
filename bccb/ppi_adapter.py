@@ -404,7 +404,14 @@ class PPI:
         try:
             self.uniprot_to_gene = uniprot.uniprot_data("gene_names", "*", True)
             self.uniprot_to_tax = uniprot.uniprot_data("organism_id", "*", True)
-        except (ValueError, AttributeError) as e:
+            # Check if results are dicts, if not, use empty dicts
+            if not isinstance(self.uniprot_to_gene, dict):
+                logger.warning(f"uniprot_to_gene returned {type(self.uniprot_to_gene)} instead of dict. Using empty mapping.")
+                self.uniprot_to_gene = {}
+            if not isinstance(self.uniprot_to_tax, dict):
+                logger.warning(f"uniprot_to_tax returned {type(self.uniprot_to_tax)} instead of dict. Using empty mapping.")
+                self.uniprot_to_tax = {}
+        except (ValueError, AttributeError, TypeError) as e:
             logger.warning(f"Failed to download uniprot gene/tax mapping data: {e}. Using empty mappings.")
             self.uniprot_to_gene = {}
             self.uniprot_to_tax = {}
@@ -627,14 +634,20 @@ class PPI:
         # map string ids to swissprot ids
         try:
             uniprot_to_string = uniprot.uniprot_data("xref_string", "*", True)
-        except (ValueError, AttributeError) as e:
+            # Check if result is a dict, if not (e.g., empty list), use empty dict
+            if not isinstance(uniprot_to_string, dict):
+                logger.warning(f"uniprot_to_string returned {type(uniprot_to_string)} instead of dict. Using empty mapping.")
+                uniprot_to_string = {}
+        except (ValueError, AttributeError, TypeError) as e:
             logger.warning(f"Failed to download uniprot-string mapping: {e}. Using empty mapping.")
             uniprot_to_string = {}
 
         self.string_to_uniprot = collections.defaultdict(list)
         for k, v in uniprot_to_string.items():
-            for string_id in list(filter(None, v.split(";"))):
-                self.string_to_uniprot[string_id.split(".")[1]].append(k)
+            if v:  # Check if v is not None or empty
+                for string_id in list(filter(None, str(v).split(";"))):
+                    if "." in string_id:
+                        self.string_to_uniprot[string_id.split(".")[1]].append(k)
 
         self.string_ints = []
 
@@ -653,9 +666,9 @@ class PPI:
         valid_tax_ids = [tax for tax in self.tax_ids if tax not in tax_ids_to_be_skipped]
         
         # In test mode, only download a subset
-        # if self.test_mode:
-        #     valid_tax_ids = valid_tax_ids[:10]  # Only process first 10 species in test mode
-        #     logger.info(f"Test mode: limiting to first 10 species out of {len(self.tax_ids)} total")
+        if self.test_mode:
+            valid_tax_ids = valid_tax_ids[:10]  # Only process first 10 species in test mode
+            logger.info(f"Test mode: limiting to first 10 species out of {len(self.tax_ids)} total")
 
         # Parallel download function
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -761,6 +774,23 @@ class PPI:
 
         logger.debug("Started processing STRING data")
         t1 = time()
+
+        # Check if string_ints is empty
+        if not self.string_ints:
+            logger.warning("No STRING interactions found. This might be due to failed uniprot-string mapping.")
+            logger.warning("Creating empty STRING dataframe.")
+            
+            # Create empty dataframe with expected structure
+            string_df_unique = pd.DataFrame(columns=list(self.string_field_new_names.values()))
+            
+            t2 = time()
+            logger.info(f"STRING data is processed in {round((t2-t1) / 60, 2)} mins")
+            logger.debug(f"Total number of interactions for STRING is {string_df_unique.shape[0]}")
+            
+            self.check_status_and_properties["string"]["processed"] = True
+            self.check_status_and_properties["string"]["dataframe"] = string_df_unique
+            self.check_status_and_properties["string"]["properties_dict"] = self.string_field_new_names
+            return
 
         # create dataframe
         string_df = pd.DataFrame.from_records(

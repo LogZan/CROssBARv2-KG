@@ -1,0 +1,18 @@
+version: '3.8'
+services:
+  test:
+    image: alpine
+    command: touch /data/test_vol
+    volumes:
+      - type: volume
+        source: my-data
+        target: /data
+        read_only: false
+
+volumes:
+  my-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /GenSIvePFS/users/clzeng/docker_data

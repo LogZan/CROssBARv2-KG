@@ -151,6 +151,12 @@ class EC:
         logger.info("Retrieving RXNFP ec number embeddings")
 
         self.ec_number_to_rxnfp_embedding = {}
+        
+        # Check if path is provided
+        if rxnfp_embedding_path is None:
+            logger.warning("No RXNFP embedding path provided, skipping embedding retrieval")
+            return
+            
         with h5py.File(rxnfp_embedding_path, "r") as f:
             for ec_number, embedding in tqdm(f.items(), total=len(f.keys())):
                 self.ec_number_to_rxnfp_embedding[ec_number] = np.array(embedding).astype(np.float16)

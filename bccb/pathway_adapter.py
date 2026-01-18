@@ -241,23 +241,130 @@ class Pathway:
         logger.debug("Started downloading Reactome data")
         t0 = time()
 
-        if PathwayNodeType.PATHWAY in self.node_types:
-            self.reactome_pathways = list(reactome.reactome_pathways())
+        # New pypath API uses reactome_raw() instead of reactome_pathways(), etc.
+        # Check which API is available
+        has_old_api = hasattr(reactome, 'reactome_pathways')
+        has_new_api = hasattr(reactome, 'reactome_raw')
 
-        if PathwayEdgeType.REACTOME_HIERARCHICAL_RELATIONS in self.edge_types:
-            self.reactome_hierarchial_relations = (
-                reactome.reactome_pathway_relations()
-            )
+        if has_old_api:
+            # Old pypath API
+            if PathwayNodeType.PATHWAY in self.node_types:
+                try:
+                    self.reactome_pathways = list(reactome.reactome_pathways())
+                except Exception as e:
+                    logger.warning(f"Failed to download Reactome pathways: {e}")
+                    self.reactome_pathways = []
 
-        if PathwayEdgeType.PROTEIN_TO_PATHWAY in self.edge_types:
-            self.reactome_uniprot_pathway = reactome.reactome_uniprots()
+            if PathwayEdgeType.REACTOME_HIERARCHICAL_RELATIONS in self.edge_types:
+                try:
+                    self.reactome_hierarchial_relations = list(reactome.reactome_pathway_relations())
+                except Exception as e:
+                    logger.warning(f"Failed to download Reactome pathway relations: {e}")
+                    self.reactome_hierarchial_relations = []
 
-        if PathwayEdgeType.DRUG_TO_PATHWAY in self.edge_types:
-            self.reactome_chebi_pathway = reactome.reactome_chebis()
-            self.chebi_to_drugbank = {
-                list(v)[0]: k
-                for k, v in unichem.unichem_mapping("drugbank", "chebi").items()
-            }
+            if PathwayEdgeType.PROTEIN_TO_PATHWAY in self.edge_types:
+                try:
+                    self.reactome_uniprot_pathway = list(reactome.reactome_uniprots())
+                except Exception as e:
+                    logger.warning(f"Failed to download Reactome uniprot data: {e}")
+                    self.reactome_uniprot_pathway = []
+
+            if PathwayEdgeType.DRUG_TO_PATHWAY in self.edge_types:
+                try:
+                    self.reactome_chebi_pathway = list(reactome.reactome_chebis())
+                    self.chebi_to_drugbank = {
+                        list(v)[0]: k
+                        for k, v in unichem.unichem_mapping("drugbank", "chebi").items()
+                    }
+                except Exception as e:
+                    logger.warning(f"Failed to download Reactome chebi data: {e}")
+                    self.reactome_chebi_pathway = []
+                    self.chebi_to_drugbank = {}
+
+        elif has_new_api:
+            # New pypath API (reactome_raw)
+            logger.info("Using new pypath reactome API (reactome_raw)")
+            
+            if PathwayNodeType.PATHWAY in self.node_types:
+                try:
+                    # Extract unique pathways from uniprot data
+                    from collections import namedtuple
+                    ReactomePathway = namedtuple('ReactomePathway', ['pathway_id', 'pathway_name', 'organism'])
+                    pathways_seen = set()
+                    self.reactome_pathways = []
+                    for record in reactome.reactome_raw('uniprot', event_type='all'):
+                        pid = record.get('pathway_id')
+                        if pid and pid not in pathways_seen:
+                            pathways_seen.add(pid)
+                            self.reactome_pathways.append(ReactomePathway(
+                                pathway_id=pid,
+                                pathway_name=record.get('pathway_name', ''),
+                                organism=record.get('species', '')
+                            ))
+                    logger.info(f"Loaded {len(self.reactome_pathways)} Reactome pathways")
+                except Exception as e:
+                    logger.warning(f"Failed to download Reactome pathways: {e}")
+                    self.reactome_pathways = []
+
+            if PathwayEdgeType.REACTOME_HIERARCHICAL_RELATIONS in self.edge_types:
+                try:
+                    # Use pathway_hierarchy() which still exists
+                    from collections import namedtuple
+                    ReactomeRelation = namedtuple('ReactomeRelation', ['parent', 'child'])
+                    self.reactome_hierarchial_relations = [
+                        ReactomeRelation(parent=r['parent'], child=r['child'])
+                        for r in reactome.pathway_hierarchy()
+                    ]
+                    logger.info(f"Loaded {len(self.reactome_hierarchial_relations)} Reactome pathway relations")
+                except Exception as e:
+                    logger.warning(f"Failed to download Reactome pathway relations: {e}")
+                    self.reactome_hierarchial_relations = []
+
+            if PathwayEdgeType.PROTEIN_TO_PATHWAY in self.edge_types:
+                try:
+                    from collections import namedtuple
+                    ReactomeUniprot = namedtuple('ReactomeUniprot', ['uniprot_id', 'pathway_id', 'evidence_code'])
+                    self.reactome_uniprot_pathway = [
+                        ReactomeUniprot(
+                            uniprot_id=r.get('id'),
+                            pathway_id=r.get('pathway_id'),
+                            evidence_code=r.get('evidence_code', '')
+                        )
+                        for r in reactome.reactome_raw('uniprot', event_type='all')
+                    ]
+                    logger.info(f"Loaded {len(self.reactome_uniprot_pathway)} Reactome protein-pathway relations")
+                except Exception as e:
+                    logger.warning(f"Failed to download Reactome uniprot data: {e}")
+                    self.reactome_uniprot_pathway = []
+
+            if PathwayEdgeType.DRUG_TO_PATHWAY in self.edge_types:
+                try:
+                    from collections import namedtuple
+                    ReactomeChebi = namedtuple('ReactomeChebi', ['chebi_id', 'pathway_id', 'evidence_code'])
+                    self.reactome_chebi_pathway = [
+                        ReactomeChebi(
+                            chebi_id=r.get('id'),
+                            pathway_id=r.get('pathway_id'),
+                            evidence_code=r.get('evidence_code', '')
+                        )
+                        for r in reactome.reactome_raw('chebi', event_type='all')
+                    ]
+                    self.chebi_to_drugbank = {
+                        list(v)[0]: k
+                        for k, v in unichem.unichem_mapping("drugbank", "chebi").items()
+                    }
+                    logger.info(f"Loaded {len(self.reactome_chebi_pathway)} Reactome chebi-pathway relations")
+                except Exception as e:
+                    logger.warning(f"Failed to download Reactome chebi data: {e}")
+                    self.reactome_chebi_pathway = []
+                    self.chebi_to_drugbank = {}
+        else:
+            logger.warning("No reactome API available in pypath. Skipping Reactome data.")
+            self.reactome_pathways = []
+            self.reactome_hierarchial_relations = []
+            self.reactome_uniprot_pathway = []
+            self.reactome_chebi_pathway = []
+            self.chebi_to_drugbank = {}
 
         t1 = time()
         logger.info(
@@ -360,13 +467,20 @@ class Pathway:
             f"Compath data is downloaded in {round((t1-t0) / 60, 2)} mins"
         )
     @validate_call
-    def retrieve_biokeen_embeddings(self, biokeen_embedding_path: FilePath) -> None:
+    def retrieve_biokeen_embeddings(self, biokeen_embedding_path: FilePath | None = None) -> None:
         logger.info("Retrieving BioKenn pathway embeddings.")
 
         self.pathway_id_to_biokeen_embedding = {}
+        
+        # Check if path is provided
+        if biokeen_embedding_path is None:
+            logger.warning("No BioKeen embedding path provided, skipping embedding retrieval")
+            return
+            
         with h5py.File(biokeen_embedding_path, "r") as f:
             for patway_id, embedding in f.items():
                 self.pathway_id_to_biokeen_embedding[patway_id] = np.array(embedding).astype(np.float16)
+
     def process_reactome_protein_pathway(self) -> pd.DataFrame:
 
         if not hasattr(self, "reactome_uniprot_pathway"):
@@ -375,9 +489,11 @@ class Pathway:
         logger.debug("Started processing Reactome protein-pathway data")
         t0 = time()
 
+        # Handle case where reactome_uniprot_pathway might be empty
+        reactome_uniprot_pathway = getattr(self, 'reactome_uniprot_pathway', None) or []
         df_list = [
             (pp.uniprot_id, pp.pathway_id, pp.evidence_code)
-            for pp in self.reactome_uniprot_pathway
+            for pp in reactome_uniprot_pathway
             if pp.evidence_code not in self.remove_selected_annotations
         ]
         df = pd.DataFrame(
@@ -436,11 +552,14 @@ class Pathway:
         logger.debug("Started processing Reactome drug-pathway data")
         t0 = time()
 
+        # Handle case where reactome_chebi_pathway or chebi_to_drugbank might be empty
+        reactome_chebi_pathway = getattr(self, 'reactome_chebi_pathway', None) or []
+        chebi_to_drugbank = getattr(self, 'chebi_to_drugbank', None) or {}
         df_list = [
-            (self.chebi_to_drugbank[cp.chebi_id], cp.pathway_id)
-            for cp in self.reactome_chebi_pathway
+            (chebi_to_drugbank[cp.chebi_id], cp.pathway_id)
+            for cp in reactome_chebi_pathway
             if cp.evidence_code not in self.remove_selected_annotations
-            and self.chebi_to_drugbank.get(cp.chebi_id)
+            and chebi_to_drugbank.get(cp.chebi_id)
         ]
         df = pd.DataFrame(df_list, columns=["drug_id", "pathway_id"])
 
@@ -713,7 +832,9 @@ class Pathway:
 
         node_list = []
 
-        for index, p in tqdm(enumerate(self.reactome_pathways)):
+        # Handle case where reactome_pathways might be empty or None
+        reactome_pathways = getattr(self, 'reactome_pathways', None) or []
+        for index, p in tqdm(enumerate(reactome_pathways)):
             pathway_id = self.add_prefix_to_id(
                 prefix="reactome", identifier=p.pathway_id
             )
@@ -1020,8 +1141,10 @@ class Pathway:
 
         logger.info("Started writing reactome hierarchial edges")
 
+        # Handle case where reactome_hierarchial_relations might be empty
+        reactome_hierarchial_relations = getattr(self, 'reactome_hierarchial_relations', None) or []
         edge_list = []
-        for index, pp in tqdm(enumerate(self.reactome_hierarchial_relations)):
+        for index, pp in tqdm(enumerate(reactome_hierarchial_relations)):
             parent_id = self.add_prefix_to_id(
                 prefix="reactome", identifier=pp.parent
             )
@@ -1097,13 +1220,15 @@ class Pathway:
             if self.early_stopping and index >= self.early_stopping:
                 break
 
+        # Handle case where reactome_pathways might be empty
+        reactome_pathways = getattr(self, 'reactome_pathways', None) or []
         index = 0
         for p1 in tqdm(
-            [p for p in self.reactome_pathways if p.organism == "Homo sapiens"]
+            [p for p in reactome_pathways if p.organism == "Homo sapiens"]
         ):
             p1_id_last_element = p1.pathway_id.split("-")[-1]
 
-            for p2 in self.reactome_pathways:
+            for p2 in reactome_pathways:
                 p2_id_last_element = p2.pathway_id.split("-")[-1]
 
                 if p1.pathway_id == p2.pathway_id:

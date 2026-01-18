@@ -12,13 +12,25 @@ services:
       NEO4J_AUTH: none
       NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
       FILL_DB_ON_STARTUP: "yes"
+    user: "7474:7474"
     volumes:
       # Give -R 777 for this path
-      - /GenSIvePFS/users/clzeng/docker_data:/data:rw
-      - ./scripts/import_local.sh:/scripts/import_local.sh
-      - ./biocypher-out:/biocypher-out:ro
-      # Mount the full path so import scripts work
-      - /GenSIvePFS/users/clzeng/workspace/CROssBARv2-KG/biocypher-out:/GenSIvePFS/users/clzeng/workspace/CROssBARv2-KG/biocypher-out:ro
+      - type: bind
+        source: /GenSIvePFS/users/clzeng/docker_data
+        target: /data
+        read_only: false
+      - type: bind
+        source: ./scripts/import_local.sh
+        target: /scripts/import_local.sh
+        read_only: false
+      - type: bind
+        source: ./biocypher-out
+        target: /biocypher-out
+        read_only: false
+      - type: bind
+        source: /GenSIvePFS/users/clzeng/workspace/CROssBARv2-KG/biocypher-out
+        target: /GenSIvePFS/users/clzeng/workspace/CROssBARv2-KG/biocypher-out
+        read_only: false
     command:
       - /bin/bash
       - /scripts/import_local.sh
@@ -26,14 +38,20 @@ services:
   deploy:
     image: neo4j:5.26.19-enterprise
     container_name: deploy
+    user: "7474:7474"
     volumes:
-      - /GenSIvePFS/users/clzeng/docker_data:/data:rw
+      - type: bind
+        source: /GenSIvePFS/users/clzeng/docker_data
+        target: /data
+        read_only: false
     environment:
-      NEO4J_dbms_security_auth__enabled: "false"
+      NEO4J_AUTH: neo4j/password
+      NEO4J_dbms_security_auth__enabled: "true"
       NEO4J_dbms_databases_default__to__read__only: "false"
       NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
-      NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
+      NEO4J_PLUGINS: '["apoc", "bloom"]'
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*,bloom.*"
+      NEO4J_neo4j_bloom_authorization__role: "admin,reader,editor"
     ports:
       - "127.0.0.1:7474:7474"
       - "7687:7687"

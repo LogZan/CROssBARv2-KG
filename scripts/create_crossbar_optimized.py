@@ -1,5 +1,4 @@
 import sys
-import gc
 from pathlib import Path
 
 project_root = Path(__file__).resolve().parent.parent
@@ -71,6 +70,7 @@ from bccb.tfgen_adapter import (
 )
 
 from biocypher import BioCypher
+import gc  # For garbage collection
 
 bc = BioCypher(biocypher_config_path= str(project_root / "config/biocypher_config.yaml"),
                schema_config_path= str(project_root / "config/schema_config.yaml"),
@@ -127,6 +127,9 @@ uniprot_id_type = [
      UniprotIDField.GENE_ENTREZ_ID,
 ]
 
+print("=" * 80)
+print("Starting UniProt adapter...")
+print("=" * 80)
 
 uniprot_adapter = UniprotSwissprot(
         json_path="/GenSIvePFS/users/data/UniProt/UniProtKB_SwissProt/uniprotkb_reviewed_true_2025_11_04.json",
@@ -153,45 +156,38 @@ if export_as_csv:
                                     node_data=uniprot_nodes,
                                     edge_data=uniprot_edges)
 
+# Clean up memory after UniProt
+del uniprot_adapter, uniprot_nodes, uniprot_edges
+gc.collect()
+
+print("✓ UniProt adapter completed")
+
 # PPI
-ppi_adapter = PPI(organism=9606, 
-                  output_dir=output_dir_path,
-                  export_csv=export_as_csv,
-                  test_mode=TEST_MODE)
+# ppi_adapter = PPI(organism=None, 
+#                   output_dir=output_dir_path,
+#                   export_csv=export_as_csv,
+#                   test_mode=TEST_MODE)
 
-ppi_adapter.download_ppi_data(cache=CACHE)
+# ppi_adapter.download_ppi_data(cache=CACHE)
 
-ppi_adapter.process_ppi_data()
+# ppi_adapter.process_ppi_data()
 
-bc.write_edges(ppi_adapter.get_ppi_edges())
+# bc.write_edges(ppi_adapter.get_ppi_edges())
 
 # protein domain
-# Note: pypath 0.16.28+ uses rescued data from OmniPath, currently only human (9606) available
-try:
-    interpro_adapter = InterPro(
-        organism=9606,  # Use human for now, rescued data only supports 9606
-        test_mode=TEST_MODE
-    )
-
-    interpro_adapter.download_interpro_data(cache=CACHE)
-
-    if export_as_csv:
-        interpro_adapter.export_as_csv(path=output_dir_path)
-
-    bc.write_nodes(interpro_adapter.get_interpro_nodes())
-    bc.write_edges(interpro_adapter.get_interpro_edges())
-except Exception as e:
-    print(f"WARNING: InterPro adapter failed: {e}")
-    print("Skipping InterPro data, continuing with other adapters...")
-finally:
-    del interpro_adapter
-    gc.collect()
-    print("Memory cleaned up after InterPro adapter")
+# Note: SKIP InterPro due to memory issues - can be run separately
+print("=" * 80)
+print("SKIPPING InterPro adapter (causes OOM - Out Of Memory)")
+print("To run InterPro separately, use a machine with more memory")
+print("=" * 80)
 
 # gene ontology
 try:
+    print("=" * 80)
+    print("Starting GO adapter...")
+    print("=" * 80)
     go_adapter = GO(
-        organism=9606, 
+        organism="*", 
         test_mode=TEST_MODE
     )
     go_adapter.download_go_data(cache=CACHE)
@@ -199,62 +195,59 @@ try:
     bc.write_edges(go_adapter.get_go_edges())
     if export_as_csv:
         go_adapter.export_as_csv(path=output_dir_path)
-except Exception as e:
-    print(f"WARNING: GO adapter failed: {e}")
-finally:
     del go_adapter
     gc.collect()
-    print("Memory cleaned up after GO adapter")
+    print("✓ GO adapter completed")
+except Exception as e:
+    print(f"WARNING: GO adapter failed: {e}")
 
-# drug - with memory optimization
+# drug
 try:
+    print("=" * 80)
+    print("Starting Drug adapter...")
+    print("=" * 80)
     drug_adapter = Drug(
         drugbank_user=drugbank_user, 
         drugbank_passwd=drugbank_passwd,    
         export_csv=export_as_csv, 
         output_dir=output_dir_path,
-        test_mode=TEST_MODE,
-        low_memory_mode=True  # Enable memory optimization
+        test_mode=TEST_MODE
     )
     drug_adapter.download_drug_data(cache=CACHE)
     drug_adapter.process_drug_data()
     bc.write_nodes(drug_adapter.get_drug_nodes())
     bc.write_edges(drug_adapter.get_edges())
+    del drug_adapter
+    gc.collect()
+    print("✓ Drug adapter completed")
 except Exception as e:
     print(f"WARNING: Drug adapter failed: {e}")
-    import traceback
-    traceback.print_exc()
-finally:
-    if 'drug_adapter' in dir():
-        del drug_adapter
-    gc.collect()
-    print("Memory cleaned up after Drug adapter")
 
-# compound - with memory optimization
+# compound
 try:
+    print("=" * 80)
+    print("Starting Compound adapter...")
+    print("=" * 80)
     compound_adapter = Compound(
-        stitch_organism=9606,
+        stitch_organism="*",
         export_csv=export_as_csv, 
-        output_dir=output_dir_path,
-        test_mode=TEST_MODE,
-        low_memory_mode=True  # Enable memory optimization
+        output_dir=output_dir_path
     )
     compound_adapter.download_compound_data(cache=CACHE)
     compound_adapter.process_compound_data()
     bc.write_nodes(compound_adapter.get_compound_nodes())
     bc.write_edges(compound_adapter.get_cti_edges())
+    del compound_adapter
+    gc.collect()
+    print("✓ Compound adapter completed")
 except Exception as e:
     print(f"WARNING: Compound adapter failed: {e}")
-    import traceback
-    traceback.print_exc()
-finally:
-    if 'compound_adapter' in dir():
-        del compound_adapter
-    gc.collect()
-    print("Memory cleaned up after Compound adapter")
 
 # orthology
 try:
+    print("=" * 80)
+    print("Starting Orthology adapter...")
+    print("=" * 80)
     orthology_adapter = Orthology(
         export_csv=export_as_csv, 
         output_dir=output_dir_path,
@@ -262,13 +255,17 @@ try:
     )
     orthology_adapter.download_orthology_data(cache=CACHE)
     bc.write_edges(orthology_adapter.get_orthology_edges())
+    del orthology_adapter
+    gc.collect()
+    print("✓ Orthology adapter completed")
 except Exception as e:
     print(f"WARNING: Orthology adapter failed: {e}")
-finally:
-    gc.collect()
 
 # disease
 try:
+    print("=" * 80)
+    print("Starting Disease adapter...")
+    print("=" * 80)
     disease_adapter = Disease(
         drugbank_user=drugbank_user, 
         drugbank_passwd=drugbank_passwd,
@@ -279,13 +276,17 @@ try:
     disease_adapter.download_disease_data(cache=CACHE)
     bc.write_nodes(disease_adapter.get_nodes())
     bc.write_edges(disease_adapter.get_edges())
+    del disease_adapter
+    gc.collect()
+    print("✓ Disease adapter completed")
 except Exception as e:
     print(f"WARNING: Disease adapter failed: {e}")
-finally:
-    gc.collect()
 
 # phenotype
 try:
+    print("=" * 80)
+    print("Starting Phenotype adapter...")
+    print("=" * 80)
     phenotype_adapter = HPO(
         export_csv=export_as_csv, 
         output_dir=output_dir_path,
@@ -294,13 +295,17 @@ try:
     phenotype_adapter.download_hpo_data(cache=CACHE)
     bc.write_nodes(phenotype_adapter.get_nodes())
     bc.write_edges(phenotype_adapter.get_edges())
+    del phenotype_adapter
+    gc.collect()
+    print("✓ Phenotype adapter completed")
 except Exception as e:
     print(f"WARNING: Phenotype adapter failed: {e}")
-finally:
-    gc.collect()
 
 # pathway
 try:
+    print("=" * 80)
+    print("Starting Pathway adapter...")
+    print("=" * 80)
     pathway_adapter = Pathway(
         drugbank_user=drugbank_user, 
         drugbank_passwd=drugbank_passwd,
@@ -311,19 +316,18 @@ try:
     pathway_adapter.download_pathway_data(cache=CACHE)
     bc.write_nodes(pathway_adapter.get_nodes())
     bc.write_edges(pathway_adapter.get_edges())
+    del pathway_adapter
+    gc.collect()
+    print("✓ Pathway adapter completed")
 except Exception as e:
     print(f"WARNING: Pathway adapter failed: {e}")
-    import traceback
-    traceback.print_exc()
-finally:
-    if 'pathway_adapter' in dir():
-        del pathway_adapter
-    gc.collect()
-    print("Memory cleaned up after Pathway adapter")
 
 
 # side effect
 try:
+    print("=" * 80)
+    print("Starting Side Effect adapter...")
+    print("=" * 80)
     side_effect_adapter = SideEffect(
         drugbank_user=drugbank_user,
         drugbank_passwd=drugbank_passwd,
@@ -334,18 +338,17 @@ try:
     side_effect_adapter.download_side_effect_data(cache=CACHE)
     bc.write_nodes(side_effect_adapter.get_nodes())
     bc.write_edges(side_effect_adapter.get_edges())
+    del side_effect_adapter
+    gc.collect()
+    print("✓ Side Effect adapter completed")
 except Exception as e:
     print(f"WARNING: Side effect adapter failed: {e}")
-    import traceback
-    traceback.print_exc()
-finally:
-    if 'side_effect_adapter' in dir():
-        del side_effect_adapter
-    gc.collect()
-    print("Memory cleaned up after Side effect adapter")
 
 # ec numbers
 try:
+    print("=" * 80)
+    print("Starting EC adapter...")
+    print("=" * 80)
     ec_adapter = EC(
         export_csv=export_as_csv,
         output_dir=output_dir_path,
@@ -354,18 +357,17 @@ try:
     ec_adapter.download_ec_data(cache=CACHE)
     bc.write_nodes(ec_adapter.get_nodes())
     bc.write_edges(ec_adapter.get_edges())
+    del ec_adapter
+    gc.collect()
+    print("✓ EC adapter completed")
 except Exception as e:
     print(f"WARNING: EC adapter failed: {e}")
-    import traceback
-    traceback.print_exc()
-finally:
-    if 'ec_adapter' in dir():
-        del ec_adapter
-    gc.collect()
-    print("Memory cleaned up after EC adapter")
 
 # tf-gen
 try:
+    print("=" * 80)
+    print("Starting TFGene adapter...")
+    print("=" * 80)
     tfgene_adapter = TFGene(
         export_csv=export_as_csv,
         output_dir=output_dir_path,
@@ -373,21 +375,20 @@ try:
     )
     tfgene_adapter.download_tfgen_data(cache=CACHE)
     bc.write_edges(tfgene_adapter.get_edges())
+    del tfgene_adapter
+    gc.collect()
+    print("✓ TFGene adapter completed")
 except Exception as e:
     print(f"WARNING: TFGene adapter failed: {e}")
-    import traceback
-    traceback.print_exc()
-finally:
-    if 'tfgene_adapter' in dir():
-        del tfgene_adapter
-    gc.collect()
-    print("Memory cleaned up after TFGene adapter")
 
 
 # Write import call and other post-processing
+print("=" * 80)
+print("Writing import call and summary...")
+print("=" * 80)
 bc.write_import_call()
 bc.summary()
 
-print("="*80)
-print("Script completed successfully!")
-print("="*80)
+print("=" * 80)
+print("✓ Script completed successfully!")
+print("=" * 80)

@@ -486,9 +486,13 @@ class GO:
                 ]
             ):
                 t0 = time()
+                # Load SwissProt proteins based on organism to save memory
+                organism_for_swissprot = self.organism if self.organism not in ("*", None) else "*"
+                logger.info(f"Loading SwissProt proteins for organism: {organism_for_swissprot}")
                 self.swissprots = set(
-                    uniprot._all_uniprots(organism="*", swissprot=True)
+                    uniprot._all_uniprots(organism=organism_for_swissprot, swissprot=True)
                 )
+                logger.info(f"Loaded {len(self.swissprots)} SwissProt proteins")
 
                 if self.organism in ("*", None):
                     logger.debug(
@@ -609,6 +613,12 @@ class GO:
         logger.info("Retrieving Anc2vec go term embeddings")
 
         self.go_term_to_anc2vec_embedding = {}
+        
+        # Check if path is provided
+        if anc2vec_embedding_path is None:
+            logger.warning("No Anc2vec embedding path provided, skipping embedding retrieval")
+            return
+            
         with h5py.File(anc2vec_embedding_path, "r") as f:
             for go_term, embedding in tqdm(f.items(), total=len(f.keys())):
                 self.go_term_to_anc2vec_embedding[go_term] = np.array(embedding).astype(np.float16)

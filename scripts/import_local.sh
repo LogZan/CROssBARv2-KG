@@ -4,8 +4,12 @@
 
 sleep 2
 
-# Find the latest output directory
-LATEST_DIR=$(ls -td /biocypher-out/*/ 2>/dev/null | head -1)
+# Find the output directory (prefer the collective import call folder if it exists)
+if [ -d "/biocypher-out/crossbar_all_organisms_admin_import_call/" ]; then
+    LATEST_DIR="/biocypher-out/crossbar_all_organisms_admin_import_call/"
+else
+    LATEST_DIR=$(ls -td /biocypher-out/*/ 2>/dev/null | head -1)
+fi
 
 if [ -z "$LATEST_DIR" ]; then
     echo "ERROR: No output directories found in /biocypher-out/"

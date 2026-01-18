@@ -6,7 +6,6 @@ from pypath.inputs import (
     ctdbase,
     clinvar,
     # disgenet,
-    chembl,
     diseases,
     opentargets,
     drugbank,
@@ -14,6 +13,8 @@ from pypath.inputs import (
     unichem,
     humsavar,
 )
+# Use compatibility layer for chembl
+from . import pypath_compat as chembl_compat
 from . import kegg_local
 from . import disgenet_local as disgenet
 import json
@@ -394,7 +395,7 @@ class Disease:
         if DiseaseEdgeType.DISEASE_TO_DRUG in self.edge_types:
             t0 = time()
 
-            self.chembl_disease_drug = chembl.chembl_drug_indications()
+            self.chembl_disease_drug = list(chembl_compat.chembl_drug_indications())
 
             self.chembl_to_drugbank = {
                 k: list(v)[0]
@@ -699,13 +700,19 @@ class Disease:
                 f"Malacards disease comorbidity data is downloaded in {round((t1-t0) / 60, 2)} mins"
             )
 
-    def retrieve_doc2vec_embedding(self, doc2vec_embedding_path: FilePath) -> None:
+    def retrieve_doc2vec_embedding(self, doc2vec_embedding_path: FilePath | None = None) -> None:
         logger.info("Retrieving Doc2Vec disease embeddings.")
 
         self.disease_id_to_doc2vec_embedding = {}
+        
+        # Check if path is provided
+        if doc2vec_embedding_path is None:
+            logger.warning("No Doc2Vec embedding path provided, skipping embedding retrieval")
+            return
+            
         with h5py.File(doc2vec_embedding_path, "r") as f:
             for mondo_id, embedding in f.items():
-                self.hpo_id_to_cada_embedding[mondo_id] = np.array(embedding).astype(np.float16)
+                self.disease_id_to_doc2vec_embedding[mondo_id] = np.array(embedding).astype(np.float16)
 
     def prepare_mappings(self) -> None:
         """

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import os
+import gc
 import collections
 import h5py
 import gzip
 
 from pypath.share import curl, settings, common
-from pypath.inputs import chembl, stitch, uniprot, unichem, string
+from pypath.inputs import stitch, uniprot, unichem, string
+# Use compatibility layer for chembl
+from . import pypath_compat as chembl_compat
 from contextlib import ExitStack
 from bioregistry import normalize_curie
 
@@ -83,6 +86,7 @@ class CompoundModel(BaseModel):
     export_csv: bool = False
     output_dir: DirectoryPath | None = None
     stitch_organism: Optional[int | Literal["*"] | None] = None,
+    low_memory_mode: bool = False
 
 
 class Compound:
@@ -100,6 +104,7 @@ class Compound:
         export_csv: Optional[bool] = False,
         output_dir: Optional[DirectoryPath | None] = None,
         stitch_organism: Optional[int | Literal["*"] | None] = None,
+        low_memory_mode: Optional[bool] = False,
     ):
         """
         Initialize the Compound class.
@@ -112,6 +117,7 @@ class Compound:
             export_csv: if True, export data as csv
             output_dir: Location of csv export if `export_csv` is True, if not defined it will be current directory
             stitch_organism: NCBI taxonomy ID of the organism to download compound-target interaction data for, if "*", download for all organisms
+            low_memory_mode: if True, uses memory-efficient processing (cleanup after each step)
         """
 
         model = CompoundModel(
@@ -121,7 +127,8 @@ class Compound:
             add_prefix=add_prefix,
             export_csv=export_csv,
             output_dir=output_dir,
-            stitch_organism=stitch_organism
+            stitch_organism=stitch_organism,
+            low_memory_mode=low_memory_mode,
         ).model_dump()
 
         self.stitch_organism = (
@@ -131,6 +138,7 @@ class Compound:
         self.add_prefix = model["add_prefix"]
         self.export_csv = model["export_csv"]
         self.output_dir = model["output_dir"]
+        self.low_memory_mode = model["low_memory_mode"]
 
         # set node fields
         self.set_node_fields(node_fields=model["node_fields"])
@@ -142,6 +150,27 @@ class Compound:
         self.early_stopping = None
         if model["test_mode"]:
             self.early_stopping = 100
+
+    def cleanup_memory(self, attributes_to_clear: list = None):
+        """
+        Clean up memory by clearing specified attributes and forcing garbage collection.
+        
+        Args:
+            attributes_to_clear: List of attribute names to clear. If None, clears common large data structures.
+        """
+        if attributes_to_clear is None:
+            attributes_to_clear = [
+                'chembl_acts', 'compounds', 'document_to_pubmed',
+                'stitch_ints', 'string_to_uniprot',
+            ]
+        
+        for attr in attributes_to_clear:
+            if hasattr(self, attr):
+                delattr(self, attr)
+                logger.debug(f"Cleared attribute: {attr}")
+        
+        gc.collect()
+        logger.debug("Memory cleanup completed")
 
     @validate_call
     def download_compound_data(
@@ -199,6 +228,12 @@ class Compound:
         activities_chembl = self.get_activite_compounds()
 
         self.chembl_id_to_selformer_embedding = {}
+        
+        # Check if path is provided
+        if selformer_embedding_path is None:
+            logger.warning("No SELFormer embedding path provided, skipping embedding retrieval")
+            return
+            
         with h5py.File(selformer_embedding_path, "r") as f:
             for compound_id, embedding in tqdm(f.items(), total=len(f.keys())):
                 if compound_id in activities_chembl and compound_id not in self.chembl_to_drugbank:
@@ -221,35 +256,46 @@ class Compound:
         t0 = time()
         logger.debug("Started downloading Chembl data")
 
-        self.compounds = chembl.chembl_molecules()
+        self.compounds = list(chembl_compat.chembl_molecules())
 
-        self.chembl_acts = chembl.chembl_activities(
+        self.chembl_acts = list(chembl_compat.chembl_activities(
             standard_relation="=",
-        )
+        ))
 
-        self.document_to_pubmed = chembl.chembl_documents()
+        self.document_to_pubmed = chembl_compat.chembl_documents()
 
-        chembl_targets = chembl.chembl_targets()
+        chembl_targets = list(chembl_compat.chembl_targets())
 
-        # filter out TrEMBL targets
-        swissprots = set(uniprot._all_uniprots(organism="*", swissprot=True))
+        # filter out TrEMBL targets - use stitch_organism to save memory
+        organism_for_swissprot = self.stitch_organism if self.stitch_organism != "*" else "*"
+        logger.info(f"Loading SwissProt proteins for organism: {organism_for_swissprot}")
+        swissprots = set(uniprot._all_uniprots(organism=organism_for_swissprot, swissprot=True))
+        logger.info(f"Loaded {len(swissprots)} SwissProt proteins")
         chembl_targets = [
             i for i in chembl_targets if i.accession in swissprots
         ]
         self.target_dict = {
             i.target_chembl_id: i.accession for i in chembl_targets
         }
+        # Clear swissprots and chembl_targets to free memory
+        del swissprots, chembl_targets
+        gc.collect()
 
-        chembl_assays = chembl.chembl_assays()
+        chembl_assays = list(chembl_compat.chembl_assays())
         self.assay_dict = {
             i.assay_chembl_id: i for i in chembl_assays if i.assay_type == "B"
         }
+        # Clear chembl_assays to free memory
+        del chembl_assays
+        gc.collect()
 
         # chembl to drugbank mapping
-        self.chembl_to_drugbank = unichem.unichem_mapping("chembl", "drugbank")
+        chembl_to_drugbank_raw = unichem.unichem_mapping("chembl", "drugbank")
         self.chembl_to_drugbank = {
-            k: list(v)[0] for k, v in self.chembl_to_drugbank.items()
+            k: list(v)[0] for k, v in chembl_to_drugbank_raw.items()
         }
+        del chembl_to_drugbank_raw
+        gc.collect()
 
         t1 = time()
         logger.info(
@@ -353,6 +399,14 @@ class Compound:
             f"Chembl data is processed in {round((t1-t0) / 60, 2)} mins"
         )
 
+        # Clean up raw ChEMBL data in low memory mode
+        if self.low_memory_mode:
+            for attr in ['chembl_acts', 'document_to_pubmed']:
+                if hasattr(self, attr):
+                    delattr(self, attr)
+            gc.collect()
+            logger.debug("Cleaned up ChEMBL raw data")
+
         return chembl_cti_df
 
     @validate_call
@@ -386,6 +440,9 @@ class Compound:
         for k, v in uniprot_to_string.items():
             for string_id in list(filter(None, v.split(";"))):
                 self.string_to_uniprot[string_id.split(".")[1]].append(k)
+        # Clear uniprot_to_string to free memory
+        del uniprot_to_string
+        gc.collect()
 
         chembl_to_pubchem = unichem.unichem_mapping("chembl", "pubchem")
         self.pubchem_to_chembl = {}
@@ -395,6 +452,9 @@ class Compound:
                     self.pubchem_to_chembl[value] = k
             else:
                 self.pubchem_to_chembl[list(v)[0]] = k
+        # Clear chembl_to_pubchem to free memory
+        del chembl_to_pubchem
+        gc.collect()
 
         drugbank_to_pubchem = unichem.unichem_mapping("drugbank", "pubchem")
         self.pubchem_to_drugbank = {}
@@ -404,6 +464,9 @@ class Compound:
                     self.pubchem_to_drugbank[value] = k
             else:
                 self.pubchem_to_drugbank[list(v)[0]] = k
+        # Clear drugbank_to_pubchem to free memory
+        del drugbank_to_pubchem
+        gc.collect()
 
         self.stitch_ints = []
         for tax in tqdm(organism):

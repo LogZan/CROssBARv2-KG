@@ -4,6 +4,7 @@ import os
 import h5py
 import pandas as pd
 import numpy as np
+import gc
 
 from pypath.share import curl, settings
 from pypath.inputs import interpro
@@ -15,12 +16,13 @@ from tqdm import tqdm
 from time import time
 from biocypher._logger import logger
 
-from typing import Literal, Union, Optional
+from typing import Literal, Union, Optional, Generator
 from pydantic import BaseModel, DirectoryPath, FilePath, validate_call
 
 from enum import Enum, EnumMeta
 
 from . import cache_config
+from . import interpro_streaming
 cache_config.setup_pypath_cache()
 
 logger.debug(f"Loading module {__name__}.")
@@ -191,7 +193,7 @@ class InterPro:
         # stack pypath context managers
         with ExitStack() as stack:
 
-            stack.enter_context(settings.context(retries=retries))
+            stack.enter_context(settings.settings.context(curl_retries=retries))
 
             if debug:
                 stack.enter_context(curl.debug_on())
@@ -203,26 +205,54 @@ class InterPro:
             self.download_domain_edge_data()
 
     @validate_call
-    def download_domain_node_data(self, dom2vec_embedding_path: FilePath | None = None) -> None:
+    def download_domain_node_data(self, dom2vec_embedding_path: FilePath | None = None, 
+                                  use_streaming: bool = True) -> None:
         """
         Downloads domain node data from Interpro
+        
+        Args:
+            dom2vec_embedding_path: Path to dom2vec embedding file
+            use_streaming: If True, use memory-efficient streaming mode
         """
 
         logger.debug("Started downloading InterPro domain data")
         t0 = time()
 
-        # To do: Filter according to tax id??
-        self.interpro_entries = (
-            interpro.interpro_entries()
-        )  # returns a list of namedtuples
-        self.interpro_structural_xrefs = interpro.interpro_xrefs(
-            db_type="structural"
-        )
-        self.interpro_external_xrefs = interpro.interpro_xrefs(
-            db_type="external"
-        )
+        if use_streaming:
+            # Use streaming mode to avoid memory overflow
+            # Don't load all entries into memory at once
+            logger.info("Using streaming mode for InterPro data (memory-efficient)")
+            self._use_streaming = True
+            
+            # Build xrefs dictionaries incrementally
+            logger.info("Building structural xrefs dictionary...")
+            self.interpro_structural_xrefs = interpro_streaming.build_xrefs_dict(
+                db_type="structural",
+                early_stopping=self.early_stopping
+            )
+            gc.collect()  # Force garbage collection
+            
+            logger.info("Building external xrefs dictionary...")
+            self.interpro_external_xrefs = interpro_streaming.build_xrefs_dict(
+                db_type="external", 
+                early_stopping=self.early_stopping
+            )
+            gc.collect()
+            
+        else:
+            # Original mode - loads all data into memory
+            self._use_streaming = False
+            self.interpro_entries = (
+                interpro.interpro_entries()
+            )  # returns a list of namedtuples
+            self.interpro_structural_xrefs = interpro.interpro_xrefs(
+                db_type="structural"
+            )
+            self.interpro_external_xrefs = interpro.interpro_xrefs(
+                db_type="external"
+            )
 
-        if InterProNodeField.DOM2VEC_EMBEDDING.value in self.node_fields:
+        if InterProNodeField.DOM2VEC_EMBEDDING.value in self.node_fields and dom2vec_embedding_path is not None:
             self.retrieve_dom2vec_embeddings(dom2vec_embedding_path=dom2vec_embedding_path)
 
         t1 = time()
@@ -232,23 +262,38 @@ class InterPro:
 
     def download_domain_edge_data(self) -> None:
         """
-        Downloads Uniprot annotation data from Interpro
+        Downloads Uniprot annotation data from Interpro.
+        
+        Note: As of pypath 0.16.28, the new interpro_annotations() function uses
+        a rescued data source from OmniPath. Currently only human (9606) data
+        is available. For other organisms or all organisms, this will fall back
+        to human data with a warning.
         """
 
         logger.debug("Started downloading InterPro annotation data")
         t0 = time()
 
-        if self.organism:
-            # WARNING: decrease page_size parameter if there is a curl error about timeout in the pypath_log
-            self.interpro_annotations = interpro.interpro_annotations(
-                page_size=self.page_size,
-                reviewed=True,
-                tax_id=self.organism,
-            )
+        # New pypath version uses rescued data source which requires specific tax_id
+        # Currently only human (9606) is available
+        if self.organism and self.organism != "*":
+            tax_id = self.organism
         else:
-            self.interpro_annotations = interpro.interpro_annotations(
-                page_size=self.page_size, reviewed=True, tax_id=""
+            # Default to human if no organism specified or all organisms requested
+            logger.warning(
+                "InterPro rescued data currently only supports human (9606). "
+                "Using human data. For other organisms, the original InterPro API "
+                "may need to be restored when available."
             )
+            tax_id = 9606
+
+        try:
+            # New pypath 0.16.28+ API - no longer uses page_size or reviewed params
+            self.interpro_annotations = interpro.interpro_annotations(
+                tax_id=tax_id,
+            )
+        except Exception as e:
+            logger.error(f"Failed to download InterPro annotations: {e}")
+            self.interpro_annotations = {}
 
         t1 = time()
         logger.info(
@@ -273,7 +318,8 @@ class InterPro:
             node_label : label of interpro nodes
         """
 
-        if not hasattr(self, "interpro_entries"):
+        # Check if we need to download data first
+        if not hasattr(self, "_use_streaming"):
             self.download_domain_node_data()
 
         # create list of nodes
@@ -290,8 +336,19 @@ class InterPro:
 
         # set counter for early stopping
         counter = 0
+        
+        # Choose data source based on streaming mode
+        if getattr(self, '_use_streaming', False):
+            # Use streaming generator
+            entries_source = interpro_streaming.interpro_entries_streaming(
+                early_stopping=self.early_stopping
+            )
+            logger.info("Processing InterPro entries in streaming mode...")
+        else:
+            # Use pre-loaded data
+            entries_source = self.interpro_entries
 
-        for entry in tqdm(self.interpro_entries):
+        for entry in entries_source:
             props = {}
             interpro_props = entry._asdict()
 
@@ -314,64 +371,45 @@ class InterPro:
 
             # get member list InterPro attributes
             for element in member_list_attributes:
-                if element in self.node_fields and interpro_props.get(
-                    "member_list"
-                ).get(element):
+                member_list = interpro_props.get("member_list", {})
+                if element in self.node_fields and member_list.get(element):
                     props[element.replace(" ", "_").lower()] = (
-                        self.check_length(
-                            interpro_props.get("member_list").get(element)
-                        )
+                        self.check_length(member_list.get(element))
                     )
 
             # get external InterPro attributes
             for element in external_attributes:
-                if (
-                    element in self.node_fields
-                    and self.interpro_external_xrefs.get(entry.interpro_id).get(
-                        element
-                    )
-                ):
+                external_xrefs = self.interpro_external_xrefs.get(entry.interpro_id, {})
+                if element in self.node_fields and external_xrefs.get(element):
                     props[element.replace(" ", "_").lower()] = (
-                        self.check_length(
-                            self.interpro_external_xrefs.get(
-                                entry.interpro_id
-                            ).get(element)
-                        )
+                        self.check_length(external_xrefs.get(element))
                     )
 
             # get structural InterPro attributes
             for element in structural_attributes:
-                if (
-                    element in self.node_fields
-                    and self.interpro_structural_xrefs.get(
-                        entry.interpro_id
-                    ).get(element)
-                ):
+                structural_xrefs = self.interpro_structural_xrefs.get(entry.interpro_id, {})
+                if element in self.node_fields and structural_xrefs.get(element):
                     props[element.replace(" ", "_").lower()] = (
-                        self.check_length(
-                            self.interpro_structural_xrefs.get(
-                                entry.interpro_id
-                            ).get(element)
-                        )
+                        self.check_length(structural_xrefs.get(element))
                     )
 
             # get dom2vec embedding
-            if InterProNodeField.DOM2VEC_EMBEDDING.value in self.node_fields and self.interpro_id_to_dom2vec_embedding.get(entry.interpro_id) is not None:
-                props[InterProNodeField.DOM2VEC_EMBEDDING.value] = [str(emb) for emb in self.interpro_id_to_dom2vec_embedding[entry.interpro_id]]
+            if InterProNodeField.DOM2VEC_EMBEDDING.value in self.node_fields:
+                embedding = getattr(self, 'interpro_id_to_dom2vec_embedding', {}).get(entry.interpro_id)
+                if embedding is not None:
+                    props[InterProNodeField.DOM2VEC_EMBEDDING.value] = [str(emb) for emb in embedding]
 
             # add node to list
             node_list.append((domain_id, node_label, props))
 
             counter += 1
 
-            if self.early_stopping and counter == self.early_stopping:
+            if self.early_stopping and counter >= self.early_stopping:
                 break
-            node_list.append((domain_id, node_label, props))
-
-            counter += 1
-
-            if self.early_stopping and counter == self.early_stopping:
-                break
+            
+            # Periodically trigger garbage collection in streaming mode
+            if getattr(self, '_use_streaming', False) and counter % 5000 == 0:
+                gc.collect()
 
         t1 = time()
         logger.info(f"InterPro nodes created in {round((t1-t0) / 60, 2)} mins")
