@@ -1,21 +1,14 @@
 Title: BioCypher graph schema configuration file for CROssBAR v2
-
-# ---
-# "Named Things"
-# ---
-  
-
 gene:
   represented_as: node
   preferred_id: ncbigene
   label_in_input: gene
-  properties:    
+  properties:
     gene_names: str[]
     kegg_ids: str[]
     ensembl_transcript_ids: str[]
     ensembl_gene_ids: str[]
     gene_symbol: str
-
 protein:
   represented_as: node
   preferred_id: uniprot
@@ -30,7 +23,6 @@ protein:
     organism_id: int
     sequence: str
     prott5_embedding: float[]
-    # Extended properties from SwissProt
     uniprot_kb_id: str
     secondary_accessions: str[]
     protein_existence: str
@@ -42,19 +34,17 @@ protein:
     recommended_short_names: str[]
     alternative_names_json: str
     protein_flag: str
-  
 organism taxon:
   represented_as: node
   preferred_id: ncbitaxon
   label_in_input: organism
   properties:
     organism_name: str
-
-protein domain:  
+protein domain:
   represented_as: node
   preferred_id: interpro
   label_in_input: domain
-  properties:    
+  properties:
     protein_count: int
     name: str
     type: str
@@ -63,7 +53,6 @@ protein domain:
     pfam: str[]
     ec: str[]
     pdb: str[]
-    
 biological process:
   is_a: gene ontology
   represented_as: node
@@ -72,7 +61,6 @@ biological process:
   properties:
     name: str
     anc2vec_embedding: float[]
-  
 cellular component:
   represented_as: node
   preferred_id: go
@@ -80,7 +68,6 @@ cellular component:
   properties:
     name: str
     anc2vec_embedding: float[]
-
 molecular function:
   synonym_for: molecular activity
   represented_as: node
@@ -89,7 +76,6 @@ molecular function:
   properties:
     name: str
     anc2vec_embedding: float[]
-  
 drug:
   is_a: SmallMolecule
   represented_as: node
@@ -117,7 +103,6 @@ drug:
     inchi: str
     inchikey: str
     selformer_embedding: float[]
-
 compound:
   is_a: SmallMolecule
   represented_as: node
@@ -134,7 +119,6 @@ compound:
     inchikey: str
     qed_score: float
     selformer_embedding: float[]
-
 disease:
   represented_as: node
   preferred_id: mondo
@@ -153,7 +137,6 @@ disease:
     ncit: str
     icd9: str
     meddra: str
-
 phenotype:
   is_a: PhenotypicFeature
   represented_as: node
@@ -162,7 +145,6 @@ phenotype:
   properties:
     name: str
     synonyms: str[]
-
 pathway:
   represented_as: node
   preferred_id: id
@@ -170,7 +152,6 @@ pathway:
   properties:
     name: str
     organism: str
-
 side effect:
   is_a: phenotypic feature
   represented_as: node
@@ -179,7 +160,6 @@ side effect:
   properties:
     name: str
     synonyms: str[]
-
 ec number:
   is_a: molecular activity
   represented_as: node
@@ -188,12 +168,6 @@ ec number:
   properties:
     name: str
     rxnfp_embedding: float[]
-
-# ---
-# UniProt SwissProt Extended Nodes
-# ---
-
-# UniProt Keyword (from keywords vocabulary)
 uniprot keyword:
   is_a: NamedThing
   represented_as: node
@@ -205,134 +179,104 @@ uniprot keyword:
     category: str
     synonyms: str[]
     reviewed_protein_count: int
-
-# Functional Annotation - Parent Node
 functional annotation:
   is_a: NamedThing
   represented_as: node
   preferred_id: internal
   label_in_input: functional_annotation
-
-# Functional Annotation - Child Nodes (inherit from parent)
 function annotation:
   is_a: functional annotation
   represented_as: node
   label_in_input: function_annotation
-
 subunit annotation:
   is_a: functional annotation
   represented_as: node
   label_in_input: subunit_annotation
-
 subcellular location annotation:
   is_a: functional annotation
   represented_as: node
   label_in_input: subcellular_location_annotation
-
 tissue specificity annotation:
   is_a: functional annotation
   represented_as: node
   label_in_input: tissue_specificity_annotation
-
 similarity annotation:
   is_a: functional annotation
   represented_as: node
   label_in_input: similarity_annotation
-
 ptm annotation:
   is_a: functional annotation
   represented_as: node
   label_in_input: ptm_annotation
-
 catalytic activity annotation:
   is_a: functional annotation
   represented_as: node
   label_in_input: catalytic_activity_annotation
-
 pathway annotation:
   is_a: functional annotation
   represented_as: node
   label_in_input: pathway_annotation
-
 cofactor annotation:
   is_a: functional annotation
   represented_as: node
   label_in_input: cofactor_annotation
-
 domain annotation:
   is_a: functional annotation
   represented_as: node
   label_in_input: domain_annotation
-
 activity regulation annotation:
   is_a: functional annotation
   represented_as: node
   label_in_input: activity_regulation_annotation
-
-# Sequence Feature - Parent Node
 sequence feature:
   is_a: NamedThing
   represented_as: node
   preferred_id: internal
   label_in_input: sequence_feature
-
-# Sequence Feature - Child Nodes (inherit from parent)
 domain feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: domain_feature
-
 binding site feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: binding_site_feature
-
 active site feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: active_site_feature
-
 modified residue feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: modified_residue_feature
-
 glycosylation feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: glycosylation_feature
-
 disulfide bond feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: disulfide_bond_feature
-
 transmembrane feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: transmembrane_feature
-
 natural variant feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: natural_variant_feature
-
 mutagenesis feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: mutagenesis_feature
-
 chain feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: chain_feature
-
 region feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: region_feature
-
-# UniProt Disease (inherits from disease)
 uniprot disease:
   is_a: disease
   represented_as: node
@@ -341,33 +285,6 @@ uniprot disease:
   properties:
     disease_accession: str
     acronym: str
-
-# Cell: # relevant?
-  # represented_as: node
-  # preferred_id: CL
-  # label_in_input: Cell
-
-# cell line:
-  # represented_as: node
-  # preferred_id: ccle
-  # label_in_input: Cell_Line
-
-# tissue:
-  # is_a: grossanatomicalstructure
-  # represented_as: node
-  # preferred_id: uberon
-  # label_in_input: Tissue
-
-# patient:
-  # is_a: case
-  # represented_as: node
-  # preferred_id: id
-  # label_in_input: Patient
-
-# ---
-# Associations
-# ---
-
 gene to protein relationship:
   is_a: gene to gene product relationship
   represented_as: edge
@@ -375,7 +292,6 @@ gene to protein relationship:
   source: gene
   target: protein
   label_in_input: Gene_encodes_protein
-  
 protein to organism taxon association:
   is_a: association
   represented_as: edge
@@ -383,7 +299,6 @@ protein to organism taxon association:
   source: protein
   target: organismTaxon
   label_in_input: Protein_belongs_to_organism
-  
 post translational interaction:
   is_a: pairwise molecular interaction
   represented_as: edge
@@ -391,7 +306,7 @@ post translational interaction:
   source: protein
   target: protein
   label_in_input: Protein_interacts_with_protein
-  properties:    
+  properties:
     source: str[]
     pubmed_ids: str[]
     method: str
@@ -399,7 +314,6 @@ post translational interaction:
     intact_score: float
     string_combined_score: int
     string_physical_combined_score: int
-
 protein to protein domain association:
   is_a: association
   represented_as: edge
@@ -410,7 +324,6 @@ protein to protein domain association:
   properties:
     start: str
     end: str
-
 protein to biological process association:
   is_a: GeneToGoTermAssociation
   represented_as: edge
@@ -421,55 +334,82 @@ protein to biological process association:
   properties:
     reference: str
     evidence_code: str
-
 protein to cellular component association:
   is_a: GeneToGoTermAssociation
   represented_as: edge
-  source: [protein_located_in_cellular_component, protein_part_of_cellular_component, protein_is_active_in_cellular_component]
+  source:
+  - protein_located_in_cellular_component
+  - protein_part_of_cellular_component
+  - protein_is_active_in_cellular_component
   target: cellular component
-  label_in_input: [protein_located_in_cellular_component, protein_part_of_cellular_component, protein_is_active_in_cellular_component] 
+  label_in_input:
+  - protein_located_in_cellular_component
+  - protein_part_of_cellular_component
+  - protein_is_active_in_cellular_component
   properties:
     reference: str
     evidence_code: str
-  
 protein to molecular function association:
   is_a: GeneToGoTermAssociation
   represented_as: edge
-  source: [protein_enables_molecular_function, protein_contributes_to_molecular_function]
+  source:
+  - protein_enables_molecular_function
+  - protein_contributes_to_molecular_function
   target: molecular function
-  label_in_input: [protein_enables_molecular_function, protein_contributes_to_molecular_function]
+  label_in_input:
+  - protein_enables_molecular_function
+  - protein_contributes_to_molecular_function
   properties:
     reference: str
     evidence_code: str
-
 biological process to biological process association:
   is_a: association
   represented_as: edge
-  source: [biological_process_is_a_biological_process, biological_process_part_of_biological_process, biological_process_positively_regulates_biological_process, biological_process_negatively_regulates_biological_process]
+  source:
+  - biological_process_is_a_biological_process
+  - biological_process_part_of_biological_process
+  - biological_process_positively_regulates_biological_process
+  - biological_process_negatively_regulates_biological_process
   target: biological process
-  label_in_input: [biological_process_is_a_biological_process, biological_process_part_of_biological_process, biological_process_positively_regulates_biological_process, biological_process_negatively_regulates_biological_process]
-
+  label_in_input:
+  - biological_process_is_a_biological_process
+  - biological_process_part_of_biological_process
+  - biological_process_positively_regulates_biological_process
+  - biological_process_negatively_regulates_biological_process
 biological process to molecular function association:
   is_a: association
   represented_as: edge
-  source: [biological_process_positively_regulates_molecular_function, biological_process_negatively_regulates_molecular_function]
+  source:
+  - biological_process_positively_regulates_molecular_function
+  - biological_process_negatively_regulates_molecular_function
   target: molecular function
-  label_in_input: [biological_process_positively_regulates_molecular_function, biological_process_negatively_regulates_molecular_function]
-
+  label_in_input:
+  - biological_process_positively_regulates_molecular_function
+  - biological_process_negatively_regulates_molecular_function
 molecular function to molecular function association:
   is_a: association
   represented_as: edge
-  source: [molecular_function_is_a_molecular_function, molecular_function_part_of_molecular_function, molecular_function_positively_regulates_molecular_function, molecular_function_negatively_regulates_molecular_function]
+  source:
+  - molecular_function_is_a_molecular_function
+  - molecular_function_part_of_molecular_function
+  - molecular_function_positively_regulates_molecular_function
+  - molecular_function_negatively_regulates_molecular_function
   target: molecular function
-  label_in_input: [molecular_function_is_a_molecular_function, molecular_function_part_of_molecular_function, molecular_function_positively_regulates_molecular_function, molecular_function_negatively_regulates_molecular_function]
-
+  label_in_input:
+  - molecular_function_is_a_molecular_function
+  - molecular_function_part_of_molecular_function
+  - molecular_function_positively_regulates_molecular_function
+  - molecular_function_negatively_regulates_molecular_function
 cellular component to cellular component association:
   is_a: association
   represented_as: edge
-  source: [cellular_component_is_a_cellular_component, cellular_component_part_of_cellular_component]
+  source:
+  - cellular_component_is_a_cellular_component
+  - cellular_component_part_of_cellular_component
   target: cellular component
-  label_in_input: [cellular_component_is_a_cellular_component, cellular_component_part_of_cellular_component]
-
+  label_in_input:
+  - cellular_component_is_a_cellular_component
+  - cellular_component_part_of_cellular_component
 protein domain to molecular function association:
   is_a: association
   represented_as: edge
@@ -477,7 +417,6 @@ protein domain to molecular function association:
   source: protein domain
   target: molecular function
   label_in_input: protein_domain_enables_molecular_function
-  
 protein domain to biological process association:
   is_a: association
   represented_as: edge
@@ -485,7 +424,6 @@ protein domain to biological process association:
   source: protein domain
   target: biological process
   label_in_input: protein_domain_involved_in_biological_process
-  
 protein domain to cellular component association:
   is_a: association
   represented_as: edge
@@ -493,7 +431,6 @@ protein domain to cellular component association:
   source: protein domain
   target: cellular component
   label_in_input: protein_domain_located_in_cellular_component
-
 drug to protein association:
   is_a: pairwise molecular interaction
   represented_as: edge
@@ -515,7 +452,6 @@ drug to protein association:
     mechanism_of_action_type: str
     stitch_combined_score: float
     source: str[]
-
 drug to drug association:
   is_a: chemical to chemical association
   represented_as: edge
@@ -528,17 +464,19 @@ drug to drug association:
     interaction_level: str
     interaction_type: str[]
     source: str[]
-
 drug to gene association:
   is_a: association
   represented_as: edge
-  source: [drug_downregulates_gene, drug_upregulates_gene]
+  source:
+  - drug_downregulates_gene
+  - drug_upregulates_gene
   target: gene
-  label_in_input: [drug_downregulates_gene, drug_upregulates_gene]
+  label_in_input:
+  - drug_downregulates_gene
+  - drug_upregulates_gene
   properties:
     source: str[]
     references: str[]
-
 compound to protein association:
   is_a: pairwise molecular interaction
   represented_as: edge
@@ -555,8 +493,6 @@ compound to protein association:
     confidence_score: float
     stitch_combined_score: float
     references: str[]
-
-
 gene to gene orthology association:
   is_a: association
   represented_as: edge
@@ -568,8 +504,6 @@ gene to gene orthology association:
     source: str[]
     relation_type: str
     oma_orthology_score: float
-
-
 organism taxon to disease association:
   is_a: association
   represented_as: edge
@@ -577,8 +511,6 @@ organism taxon to disease association:
   source: organism taxon
   target: disease
   label_in_input: organism_causes_disease
-
-
 disease to drug association:
   is_a: chemical or drug or treatment to disease or phenotypic feature association
   represented_as: edge
@@ -590,7 +522,6 @@ disease to drug association:
     source: str[]
     pubmed_ids: str[]
     max_phase: str
-
 disease to disease hierarchical association:
   is_a: association
   represented_as: edge
@@ -598,7 +529,6 @@ disease to disease hierarchical association:
   source: disease
   target: disease
   label_in_input: disease_is_a_disease
-
 disease to disease association:
   is_a: association
   represented_as: edge
@@ -610,7 +540,6 @@ disease to disease association:
     source: str[]
     disgenet_jaccard_genes_score: float
     disgenet_jaccard_variants_score: float
-
 disease to disease comorbidity association:
   is_a: association
   represented_as: edge
@@ -618,7 +547,6 @@ disease to disease comorbidity association:
   source: disease
   target: disease
   label_in_input: disease_is_comorbid_with_disease
-
 gene to disease association:
   is_a: association
   represented_as: edge
@@ -639,7 +567,6 @@ gene to disease association:
     variation_id: str
     pubmed_ids: str[]
     dbsnp_id: str[]
-
 protein to phenotype association:
   is_a: GeneToPhenotypicFeatureAssociation
   represented_as: edge
@@ -647,7 +574,6 @@ protein to phenotype association:
   source: protein
   target: phenotype
   label_in_input: protein_is_associated_with_phenotype
-
 phenotype hierarchical association:
   is_a: association
   represented_as: edge
@@ -655,7 +581,6 @@ phenotype hierarchical association:
   source: phenotype
   target: phenotype
   label_in_input: phenotype_is_a_phenotype
-
 phenotype to disease association:
   is_a: DiseaseToPhenotypicFeatureAssociation
   represented_as: edge
@@ -666,7 +591,6 @@ phenotype to disease association:
   properties:
     pubmed_ids: str[]
     evidence: str
-
 protein to pathway association:
   is_a: GeneToPathwayAssociation
   represented_as: edge
@@ -677,7 +601,6 @@ protein to pathway association:
   properties:
     source: str
     evidence_code: str
-
 disease to pathway association:
   is_a: association
   represented_as: edge
@@ -687,7 +610,6 @@ disease to pathway association:
   label_in_input: disease_modulates_pathway
   properties:
     source: str[]
-
 drug to pathway association:
   is_a: ChemicalToPathwayAssociation
   represented_as: edge
@@ -697,14 +619,16 @@ drug to pathway association:
   label_in_input: drug_has_target_in_pathway
   properties:
     source: str
-
 pathway to pathway association:
   is_a: association
   represented_as: edge
-  source: [pathway_is_part_of_pathway, pathway_is_equivalent_to_pathway]
+  source:
+  - pathway_is_part_of_pathway
+  - pathway_is_equivalent_to_pathway
   target: pathway
-  label_in_input: [pathway_is_part_of_pathway, pathway_is_equivalent_to_pathway]
-
+  label_in_input:
+  - pathway_is_part_of_pathway
+  - pathway_is_equivalent_to_pathway
 reactome hierarchical association:
   is_a: association
   represented_as: edge
@@ -712,7 +636,6 @@ reactome hierarchical association:
   source: pathway
   target: pathway
   label_in_input: pathway_participates_pathway
-
 pathway to pathway orthology association:
   is_a: association
   represented_as: edge
@@ -720,7 +643,6 @@ pathway to pathway orthology association:
   source: pathway
   target: pathway
   label_in_input: pathway_is_ortholog_to_pathway
-
 drug to side effect association:
   is_a: association
   represented_as: edge
@@ -732,7 +654,6 @@ drug to side effect association:
     source: str[]
     proportional_reporting_ratio: str
     frequency: str
-
 side effect hierarchical association:
   is_a: association
   represented_as: edge
@@ -740,7 +661,6 @@ side effect hierarchical association:
   source: side effect
   target: side effect
   label_in_input: side_effect_is_a_side_effect
-
 protein to ec number association:
   is_a: ReactionToParticipantAssociation
   represented_as: edge
@@ -748,7 +668,6 @@ protein to ec number association:
   source: protein
   target: ec number
   label_in_input: protein_catalyzes_ec_number
-
 ec number hierarchical association:
   is_a: molecular activity to molecular activity association
   represented_as: edge
@@ -756,7 +675,6 @@ ec number hierarchical association:
   source: ec number
   target: ec number
   label_in_input: ec_number_is_a_ec_number
-
 gene to gene regulatory association:
   is_a: pairwise gene to gene interaction
   represented_as: edge
@@ -769,217 +687,6 @@ gene to gene regulatory association:
     dorothea_confidence_level: str
     pubmed_id: str[]
     tf_effect: str
-
-# mutation to tissue association:
-  # is_a: [genotype to tissue association, association]
-  # represented_as: edge
-  # label_as_edge: Is_Mutated_In
-  # preferred_id: id
-  # source: gene
-  # target: tissue
-  # label_in_input: Gene_Is_Mutated_In_Tissue
-
-# mutation to cell line association:
-  # is_a: [genotype to cell line association, association]
-  # represented_as: edge
-  # label_as_edge: Is_Mutated_In
-  # preferred_id: id
-  # source: gene
-  # target: cell line
-  # label_in_input: Gene_Is_Mutated_In_Cell_Line
-
-# expression to tissue association:
-  # is_a: [genotype to tissue association, association]
-  # represented_as: edge
-  # label_as_edge: Is_DEG_In
-  # preferred_id: id
-  # source: gene
-  # target: tissue
-  # label_in_input: Gene_Is_DEG_In_Tissue
-
-# expression to cell line association:
-  # is_a: [genotype to cell line association, association]
-  # represented_as: edge
-  # label_as_edge: Is_DEG_In
-  # preferred_id: id
-  # source: gene
-  # target: cell line
-# label_in_input: Gene_Is_DEG_In_Cell_Line
-
-# gene to phenotypic feature association:
-  # represented_as: edge
-  # label_as_edge: Is_Associated_With
-  # preferred_id: id
-  # source: gene
-  # target: phenotypic feature
-  # label_in_input: Gene_Is_Associated_With_Phenotype
-
-# mutation to case association:
-  # is_a: association
-  # represented_as: edge
-  # label_as_edge: Is_Mutated_In
-  # preferred_id: id
-  # source: gene
-  # target: case
-  # label_in_input: Gene_Is_Mutated_In_Patient
-
-# expression to case association:
-  # is_a: association
-  # represented_as: edge
-  # label_as_edge: Is_DEG_In
-  # preferred_id: id
-  # source: gene
-  # target: case
-  # label_in_input: Gene_Is_DEG_In_Patient
-
-# gene to pathway association:
-  # represented_as: edge
-  # label_as_edge: Is_Member_Of
-  # source: protein
-  # target: pathway
-  # preferred_id: id
-  # label_in_input: Is_Member_Of
-
-# gene to disease association:
-  # represented_as: edge
-  # label_as_edge: Is_Related_To
-  # preferred_id: id
-  # source: gene
-  # target: disease
-  # label_in_input: Gene_Is_Related_To_Disease
-
-# drug interaction:
-  # is_a: chemical to chemical association
-  # represented_as: edge
-  # label_as_edge: Interacts_With
-  # preferred_id: id
-  # source: small molecule
-  # target: small molecule
-  # label_in_input: Drug_Interacts_With_Drug
-
-# small molecule to side effect association:
-  # represented_as: edge
-  # label_as_edge: Has_Side_Effect
-  # preferred_id: id
-  # source: small molecule
-  # target: side effect
-  # label_in_input: Drug_Has_Side_Effect
-
-# small molecule to tissue association:
-  # represented_as: edge
-  # preferred_id: id
-  # source: small molecule
-  # target: tissue
-  # label_in_input: Drug_Targets_Tissue
-
-# small molecule to cell line association:
-  # represented_as: edge
-  # preferred_id: id
-  # source: small molecule
-  # target: tissue
-  # label_in_input: Drug_Targets_Cell_Line
-
-# small molecule to pathway association:
-  # represented_as: edge
-  # label_as_edge: Has_Target_In
-  # preferred_id: id
-  # source: small molecule
-  # target: pathway
-  # label_in_input: Has_Target_In
-
-# molecular mixture to protein association:
-  # represented_as: edge
-  # label_as_edge: Compound_Targets_Protein
-  # preferred_id: id
-  # source: molecular mixture
-  # target: protein
-  # label_in_input: Compound_Targets_Protein
-
-# tissue to disease association:
-  # represented_as: edge
-  # label_as_edge: Has_Disease
-  # preferred_id: id
-  # source: tissue
-  # target: disease
-  # label_in_input: Tissue_Has_Disease
-
-# cell line as a model of disease association:
-  # represented_as: edge
-  # preferred_id: id
-  # source: cell line
-  # target: disease
-  # label_in_input: Cell_Line_Has_Disease
-
-# case to disease association:
-  # represented_as: edge
-  # label_as_edge: Has_Disease
-  # preferred_id: id
-  # source: patient
-  # target: disease
-  # label_in_input: Patient_Has_Disease
-
-# disease to disease association:
-  # represented_as: edge
-  # label_as_edge: Comorbid_With
-  # preferred_id: id
-  # source: disease
-  # target: disease
-  # label_in_input: Comorbid_With
-
-# disease to phenotypic feature association:
-  # represented_as: edge
-  # label_as_edge: Is_Associated_With
-  # preferred_id: id
-  # source: disease
-  # target: phenotypic feature
-  # label_in_input: Disease_Is_Associated_With_Phenotype
-
-# disease to pathway association:
-  # represented_as: edge
-  # label_as_edge: Modulates
-  # preferred_id: id
-  # source: disease
-  # target: pathway
-  # label_in_input: Modulates
-
-# disease to small molecule association:
-  # represented_as: edge
-  # label_as_edge: Is_Treated_By
-  # preferred_id: id
-  # source: disease
-  # target: small molecule
-  # label_in_input: Is_Treated_By
-
-# protein domain to molecular activity association:
-  # represented_as: edge
-  # label_as_edge: Has_Function
-  # preferred_id: id
-  # source: protein domain
-  # target: molecular activity
-  # label_in_input: Domain_Has_Function
-
-# protein domain to cellular component association:
-  # represented_as: edge
-  # preferred_id: id
-  # source: protein domain
-  # target: cellular component
-  # label_in_input: Domain_Has_Location
-
-# suggestion for drug - small molecule
-# drug to small molecule association:
-  # is_a: association
-  # represented_as: edge
-  # label_as_edge: Contains_Active_Ingredient
-  # preferred_id: id
-  # source: drug
-  # target: small molecule
-  # label_in_input: Contains_Active_Ingredient
-
-# ---
-# UniProt SwissProt Extended Edges
-# ---
-
-# Protein -> Keyword
 protein to keyword association:
   is_a: association
   represented_as: edge
@@ -987,8 +694,6 @@ protein to keyword association:
   source: protein
   target: uniprot keyword
   label_in_input: protein_has_keyword
-
-# Keyword -> Keyword (hierarchy)
 keyword hierarchical association:
   is_a: association
   represented_as: edge
@@ -996,8 +701,6 @@ keyword hierarchical association:
   source: uniprot keyword
   target: uniprot keyword
   label_in_input: keyword_is_a_keyword
-
-# Keyword -> GO mappings
 keyword to biological process association:
   is_a: association
   represented_as: edge
@@ -1005,7 +708,6 @@ keyword to biological process association:
   source: uniprot keyword
   target: biological process
   label_in_input: keyword_maps_to_biological_process
-
 keyword to molecular function association:
   is_a: association
   represented_as: edge
@@ -1013,7 +715,6 @@ keyword to molecular function association:
   source: uniprot keyword
   target: molecular function
   label_in_input: keyword_maps_to_molecular_function
-
 keyword to cellular component association:
   is_a: association
   represented_as: edge
@@ -1021,8 +722,6 @@ keyword to cellular component association:
   source: uniprot keyword
   target: cellular component
   label_in_input: keyword_maps_to_cellular_component
-
-# Protein -> Functional Annotation (edge carries text content)
 protein to functional annotation association:
   is_a: association
   represented_as: edge
@@ -1039,8 +738,6 @@ protein to functional annotation association:
     chebi_ids: str[]
     cofactor_name: str
     location_id: str
-
-# Protein -> Sequence Feature (edge carries position and sequence info)
 protein to sequence feature association:
   is_a: association
   represented_as: edge
@@ -1057,8 +754,6 @@ protein to sequence feature association:
     ligand_name: str
     ligand_id: str
     feature_id: str
-
-# Protein -> UniProt Disease
 protein to uniprot disease association:
   is_a: association
   represented_as: edge
@@ -1068,8 +763,6 @@ protein to uniprot disease association:
   label_in_input: protein_associated_with_uniprot_disease
   properties:
     note: str
-
-# UniProt Protein Interaction (from UniProt INTERACTION comments)
 uniprot protein interaction:
   is_a: pairwise molecular interaction
   represented_as: edge
@@ -1082,3 +775,135 @@ uniprot protein interaction:
     organism_differ: bool
     intact_id_source: str
     intact_id_target: str
+mass spectrometry annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: mass_spectrometry_annotation
+biotechnology annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: biotechnology_annotation
+caution annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: caution_annotation
+developmental stage annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: developmental_stage_annotation
+sequence caution annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: sequence_caution_annotation
+disruption phenotype annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: disruption_phenotype_annotation
+web resource annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: web_resource_annotation
+induction annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: induction_annotation
+miscellaneous annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: miscellaneous_annotation
+alternative products annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: alternative_products_annotation
+biophysicochemical properties annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: biophysicochemical_properties_annotation
+polymorphism annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: polymorphism_annotation
+propeptide feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: propeptide_feature
+turn feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: turn_feature
+transit peptide feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: transit_peptide_feature
+zinc finger feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: zinc_finger_feature
+lipidation feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: lipidation_feature
+motif feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: motif_feature
+site feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: site_feature
+topological domain feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: topological_domain_feature
+non terminal residue feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: non_terminal_residue_feature
+signal feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: signal_feature
+alternative sequence feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: alternative_sequence_feature
+cross link feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: cross_link_feature
+beta strand feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: beta_strand_feature
+compositional bias feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: compositional_bias_feature
+peptide feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: peptide_feature
+sequence conflict feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: sequence_conflict_feature
+coiled coil feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: coiled_coil_feature
+intramembrane feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: intramembrane_feature
+dna binding feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: dna_binding_feature
+repeat feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: repeat_feature
+helix feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: helix_feature
