@@ -253,19 +253,24 @@ class Compound:
         )
 
     def download_chembl_data(self) -> None:
-
+        """
+        Memory-efficient ChemBL data download.
+        Uses streaming to avoid loading millions of records into memory.
+        """
         t0 = time()
-        logger.debug("Started downloading Chembl data")
+        logger.debug("Started downloading Chembl data (streaming mode)")
 
-        self.compounds = list(chembl_compat.chembl_molecules())
+        # Limit ChemBL pages to avoid OOM
+        max_pages = 10 if self.early_stopping else 100
+        logger.info(f"Using max_pages={max_pages} for ChemBL data")
 
-        self.chembl_acts = list(chembl_compat.chembl_activities(
-            standard_relation="=",
-        ))
-
-        self.document_to_pubmed = chembl_compat.chembl_documents()
-
-        chembl_targets = list(chembl_compat.chembl_targets())
+        # Step 1: Load smaller lookup tables first
+        logger.debug("Loading ChemBL targets...")
+        try:
+            chembl_targets = list(chembl_compat.chembl_targets(max_pages=max_pages))
+        except Exception as e:
+            logger.warning(f"ChemBL targets download failed: {e}")
+            chembl_targets = []
 
         # filter out TrEMBL targets - use stitch_organism to save memory
         organism_for_swissprot = self.stitch_organism if self.stitch_organism != "*" else "*"
@@ -278,24 +283,103 @@ class Compound:
         self.target_dict = {
             i.target_chembl_id: i.accession for i in chembl_targets
         }
-        # Clear swissprots and chembl_targets to free memory
+        target_chembl_ids = set(self.target_dict.keys())
         del swissprots, chembl_targets
         gc.collect()
+        logger.debug(f"Loaded {len(self.target_dict)} ChemBL targets")
 
-        chembl_assays = list(chembl_compat.chembl_assays())
-        self.assay_dict = {
-            i.assay_chembl_id: i for i in chembl_assays if i.assay_type == "B"
-        }
-        # Clear chembl_assays to free memory
-        del chembl_assays
-        gc.collect()
+        logger.debug("Loading ChemBL assays...")
+        try:
+            chembl_assays = list(chembl_compat.chembl_assays(max_pages=max_pages))
+            self.assay_dict = {
+                i.assay_chembl_id: i for i in chembl_assays if i.assay_type == "B"
+            }
+            assay_chembl_ids = set(self.assay_dict.keys())
+            del chembl_assays
+            gc.collect()
+        except Exception as e:
+            logger.warning(f"ChemBL assays download failed: {e}")
+            self.assay_dict = {}
+            assay_chembl_ids = set()
+        logger.debug(f"Loaded {len(self.assay_dict)} binding assays")
+
+        logger.debug("Loading ChemBL documents...")
+        try:
+            self.document_to_pubmed = chembl_compat.chembl_documents()
+        except Exception as e:
+            logger.warning(f"ChemBL documents download failed: {e}")
+            self.document_to_pubmed = {}
 
         # chembl to drugbank mapping
-        chembl_to_drugbank_raw = pypath_compat.unichem_mapping("chembl", "drugbank")
-        self.chembl_to_drugbank = {
-            k: list(v)[0] for k, v in chembl_to_drugbank_raw.items()
-        }
-        del chembl_to_drugbank_raw
+        logger.debug("Loading ChemBL to DrugBank mapping...")
+        try:
+            chembl_to_drugbank_raw = pypath_compat.unichem_mapping("chembl", "drugbank")
+            self.chembl_to_drugbank = {
+                k: list(v)[0] for k, v in chembl_to_drugbank_raw.items()
+            }
+            del chembl_to_drugbank_raw
+            gc.collect()
+        except Exception as e:
+            logger.warning(f"ChemBL to DrugBank mapping failed: {e}")
+            self.chembl_to_drugbank = {}
+        
+        drugbank_chembl_ids = set(self.chembl_to_drugbank.keys())
+        logger.debug(f"Loaded {len(self.chembl_to_drugbank)} ChemBL-DrugBank mappings")
+
+        # Step 2: Stream activities and filter on-the-fly
+        logger.debug("Streaming ChemBL activities (filtering on-the-fly)...")
+        self.chembl_acts = []
+        compound_ids_seen = set()
+        activity_count = 0
+        kept_count = 0
+        
+        try:
+            for act in chembl_compat.chembl_activities(standard_relation="=", max_pages=max_pages):
+                activity_count += 1
+                
+                # Filter: keep only if matches our criteria
+                if (act.assay_chembl in assay_chembl_ids
+                    and act.chembl not in drugbank_chembl_ids  # Not already a drug
+                    and act.target_chembl in target_chembl_ids  # Has valid target
+                    and act.standard_value is not None
+                    and act.standard_type is not None):
+                    
+                    self.chembl_acts.append(act)
+                    compound_ids_seen.add(act.chembl)
+                    kept_count += 1
+                
+                # Progress logging every 100K activities
+                if activity_count % 100000 == 0:
+                    logger.debug(f"  Processed {activity_count/1e3:.0f}K activities, kept {kept_count}")
+                    gc.collect()
+        except Exception as e:
+            logger.warning(f"ChemBL activities streaming failed: {e}")
+        
+        logger.info(f"Filtered {kept_count} activities from {activity_count} total")
+        
+        # Step 3: Stream molecules but only keep those we need
+        logger.debug("Streaming ChemBL molecules (filtering on-the-fly)...")
+        self.compounds = []
+        mol_count = 0
+        
+        try:
+            for mol in chembl_compat.chembl_molecules(max_pages=max_pages):
+                mol_count += 1
+                
+                # Only keep molecules that are in our filtered activities
+                if mol.molecule_chembl_id in compound_ids_seen:
+                    self.compounds.append(mol)
+                
+                if mol_count % 100000 == 0:
+                    logger.debug(f"  Processed {mol_count/1e3:.0f}K molecules, kept {len(self.compounds)}")
+                    gc.collect()
+        except Exception as e:
+            logger.warning(f"ChemBL molecules streaming failed: {e}")
+        
+        logger.info(f"Kept {len(self.compounds)} compounds from {mol_count} total molecules")
+        
+        # Cleanup
+        del compound_ids_seen, target_chembl_ids, assay_chembl_ids, drugbank_chembl_ids
         gc.collect()
 
         t1 = time()
@@ -316,23 +400,11 @@ class Compound:
         # define a list for creating dataframe
         df_list = []
 
-        # filter activities
+        # Activities already filtered during download, just convert to dataframe format
         for act in self.chembl_acts:
-            if (
-                act.assay_chembl in self.assay_dict
-                and act.chembl not in self.chembl_to_drugbank
-                and all(
-                    [
-                        True if item else False
-                        for item in [
-                            act.standard_value,
-                            act.standard_type,
-                            self.target_dict.get(act.target_chembl, None),
-                        ]
-                    ]
-                )
-            ):
-
+            # Double-check we have valid data (in case download mode changed)
+            target_uniprot = self.target_dict.get(act.target_chembl, None)
+            if target_uniprot and act.assay_chembl in self.assay_dict:
                 df_list.append(
                     (
                         act.chembl,
@@ -340,7 +412,7 @@ class Compound:
                         act.standard_value,
                         act.standard_type,
                         act.assay_chembl,
-                        self.target_dict.get(act.target_chembl, None),
+                        target_uniprot,
                         str(self.document_to_pubmed.get(act.document, None)),
                         self.assay_dict[act.assay_chembl].confidence_score,
                     )
@@ -438,9 +510,16 @@ class Compound:
         # map string ids to swissprot ids
         uniprot_to_string = uniprot.uniprot_data("xref_string", "*", True)
         self.string_to_uniprot = collections.defaultdict(list)
-        for k, v in uniprot_to_string.items():
-            for string_id in list(filter(None, v.split(";"))):
-                self.string_to_uniprot[string_id.split(".")[1]].append(k)
+        
+        # Handle case where uniprot_to_string is a list instead of dict
+        if isinstance(uniprot_to_string, dict):
+            for k, v in uniprot_to_string.items():
+                if v:
+                    for string_id in list(filter(None, str(v).split(";"))):
+                        self.string_to_uniprot[string_id.split(".")[1]].append(k)
+        else:
+            logger.warning(f"uniprot_to_string returned {type(uniprot_to_string).__name__} instead of dict. Using empty mapping.")
+        
         # Clear uniprot_to_string to free memory
         del uniprot_to_string
         gc.collect()

@@ -206,13 +206,14 @@ class DrugbankStreaming:
         
         return result
     
-    def drugbank_targets_full(self) -> list[tuple]:
+    def drugbank_targets_full(self, fields: list = None) -> list[tuple]:
         """
         Returns list of drug-target interactions.
+        The fields parameter is accepted for compatibility but not used.
         """
-        fields = ['drugbank_id', 'target_id', 'target_name', 'target_uniprot', 
-                  'actions', 'known_action', 'organism']
-        DrugbankTarget = collections.namedtuple('DrugbankTarget', fields)
+        field_names = ['drugbank_id', 'target_id', 'target_name', 'target_uniprot', 
+                  'actions', 'known_action', 'organism', 'references', 'polypeptide']
+        DrugbankTarget = collections.namedtuple('DrugbankTarget', field_names)
         result = []
         
         for drug in self.iter_drugs():
@@ -227,17 +228,26 @@ class DrugbankStreaming:
                 organism_elem = target.find('db:organism', self.NS)
                 known_action_elem = target.find('db:known-action', self.NS)
                 
-                # Get UniProt IDs
+                # Get UniProt IDs and polypeptide info
                 uniprot_ids = []
+                polypeptides = []
                 for polypep in target.findall('db:polypeptide', self.NS):
                     uniprot_id = polypep.get('id')
                     if uniprot_id:
                         uniprot_ids.append(uniprot_id)
+                        polypeptides.append(polypep)
                 
                 # Get actions
                 actions = [a.text for a in target.findall('db:actions/db:action', self.NS)]
                 
-                for uniprot_id in uniprot_ids:
+                # Get references (pubmed IDs)
+                references = []
+                for ref in target.findall('db:references/db:articles/db:article', self.NS):
+                    pubmed = ref.find('db:pubmed-id', self.NS)
+                    if pubmed is not None and pubmed.text:
+                        references.append(pubmed.text)
+                
+                for idx, uniprot_id in enumerate(uniprot_ids):
                     result.append(DrugbankTarget(
                         drugbank_id=drug_id,
                         target_id=target_id_elem.text if target_id_elem is not None else None,
@@ -246,6 +256,8 @@ class DrugbankStreaming:
                         actions=actions,
                         known_action=known_action_elem.text if known_action_elem is not None else None,
                         organism=organism_elem.text if organism_elem is not None else None,
+                        references=references,
+                        polypeptide=polypeptides[idx] if idx < len(polypeptides) else None,
                     ))
         
         return result

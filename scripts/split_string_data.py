@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 """
-Split STRING Database File by Species
+Split STRING Database File by Species (Single-Pass Streaming)
 
-This script splits the large STRING protein.links.detailed file into
-per-species files that can be used as pypath cache.
+Uses a single-pass streaming approach with file handles management:
+- Read input line by line
+- Keep output file handles open (up to a limit)
+- Use LRU cache to manage file handles for memory efficiency
 
 Usage:
-    python split_string_data.py --input /path/to/protein.links.detailed.v12.0.txt.gz
+    python split_string_data.py
 """
 
 import os
@@ -16,14 +18,14 @@ import hashlib
 import argparse
 import logging
 from pathlib import Path
-from collections import defaultdict
 from time import time
-from tqdm import tqdm
+from collections import OrderedDict
 
 # Configuration
 DEFAULT_INPUT = "/GenSIvePFS/users/data/STRING/protein.links.detailed.v12.0.txt.gz"
 DEFAULT_OUTPUT = "/GenSIvePFS/users/data/pypath_cache"
 STRING_VERSION = "v12.0"
+MAX_OPEN_FILES = 1000  # Maximum number of open file handles
 
 # Setup logging
 logging.basicConfig(
@@ -34,32 +36,9 @@ logger = logging.getLogger(__name__)
 
 
 def generate_pypath_hash(tax_id: str, link_type: str = "links") -> str:
-    """
-    Generate a hash similar to what pypath uses for cache filenames.
-    
-    The hash is based on the URL pattern pypath would use to download the file.
-    """
-    # pypath uses URLs like:
-    # https://stringdb-downloads.org/download/protein.links.detailed.v12.0/{taxid}.protein.links.detailed.v12.0.txt.gz
+    """Generate a hash similar to what pypath uses for cache filenames."""
     url = f"https://stringdb-downloads.org/download/protein.{link_type}.detailed.{STRING_VERSION}/{tax_id}.protein.{link_type}.detailed.{STRING_VERSION}.txt.gz"
     return hashlib.md5(url.encode()).hexdigest()
-
-
-def count_lines(filepath: str) -> int:
-    """Count lines in a gzip file for progress bar."""
-    logger.info("Counting lines in input file (this may take a while)...")
-    count = 0
-    try:
-        with gzip.open(filepath, 'rt', encoding='utf-8') as f:
-            for _ in f:
-                count += 1
-        return count
-    except Exception as e:
-        logger.warning(f"Could not count lines: {e}, will use estimate")
-        # Estimate based on file size (roughly 100 bytes per line)
-        file_size = os.path.getsize(filepath)
-        # Compressed ratio is roughly 10:1
-        return (file_size * 10) // 100
 
 
 def get_tax_id(protein_id: str) -> str:
@@ -67,20 +46,75 @@ def get_tax_id(protein_id: str) -> str:
     return protein_id.split('.')[0]
 
 
+class LRUFileHandleCache:
+    """
+    LRU cache for file handles with automatic closing of old handles.
+    """
+    
+    def __init__(self, max_handles: int, output_dir: Path, header: str):
+        self.max_handles = max_handles
+        self.output_dir = output_dir
+        self.header = header
+        self.handles = OrderedDict()  # tax_id -> file handle
+        self.line_counts = {}  # tax_id -> number of lines written
+        
+    def get_handle(self, tax_id: str):
+        """Get or create file handle for a tax_id."""
+        if tax_id in self.handles:
+            # Move to end (most recently used)
+            self.handles.move_to_end(tax_id)
+            return self.handles[tax_id]
+        
+        # Create new handle
+        file_hash = generate_pypath_hash(tax_id)
+        filename = f"{file_hash}-{tax_id}.protein.links.detailed.{STRING_VERSION}.txt.gz"
+        filepath = self.output_dir / filename
+        
+        # Close oldest handle if at limit
+        if len(self.handles) >= self.max_handles:
+            oldest_tax_id, oldest_handle = self.handles.popitem(last=False)
+            oldest_handle.close()
+        
+        # Open new handle
+        handle = gzip.open(str(filepath), 'wt', encoding='utf-8')
+        handle.write(self.header + '\n')
+        self.handles[tax_id] = handle
+        self.line_counts[tax_id] = 0
+        
+        return handle
+    
+    def write_line(self, tax_id: str, line: str):
+        """Write a line to the appropriate file."""
+        handle = self.get_handle(tax_id)
+        handle.write(line)
+        self.line_counts[tax_id] = self.line_counts.get(tax_id, 0) + 1
+    
+    def close_all(self):
+        """Close all open handles."""
+        for handle in self.handles.values():
+            try:
+                handle.close()
+            except:
+                pass
+        self.handles.clear()
+    
+    def get_stats(self) -> dict:
+        """Get statistics."""
+        return {
+            'total_species': len(self.line_counts),
+            'total_lines': sum(self.line_counts.values()),
+            'open_handles': len(self.handles)
+        }
+
+
 def split_string_file(
     input_file: str,
     output_dir: str,
-    batch_size: int = 1000000,
-    skip_existing: bool = True
+    skip_existing: bool = True,
+    max_handles: int = MAX_OPEN_FILES
 ):
     """
-    Split the large STRING file into per-species files.
-    
-    Args:
-        input_file: Path to protein.links.detailed.v12.0.txt.gz
-        output_dir: Directory to write output files
-        batch_size: Number of lines to process before writing to disk
-        skip_existing: Skip species that already have cache files
+    Split the large STRING file into per-species files using streaming.
     """
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -89,7 +123,6 @@ def split_string_file(
     existing_tax_ids = set()
     if skip_existing:
         for f in output_path.glob("*-*.protein.links.detailed.*.txt.gz"):
-            # Extract tax_id from filename like: hash-taxid.protein.links...
             parts = f.name.split('-', 1)
             if len(parts) == 2:
                 tax_part = parts[1].split('.')[0]
@@ -98,136 +131,119 @@ def split_string_file(
     
     logger.info(f"Input file: {input_file}")
     logger.info(f"Output directory: {output_dir}")
+    logger.info(f"Max open file handles: {max_handles}")
     logger.info("=" * 80)
-    logger.info("Phase 1: Reading and grouping data by species...")
+    logger.info("Streaming processing...")
     logger.info("=" * 80)
-    
-    # Count lines for progress
-    total_lines = count_lines(input_file)
-    logger.info(f"Total lines to process: {total_lines:,}")
-    
-    # Group data by tax_id
-    species_data = defaultdict(list)
-    header = None
-    skipped_lines = 0
-    processed_lines = 0
     
     start_time = time()
+    last_log_time = start_time
+    line_count = 0
+    skipped_count = 0
+    new_species = set()
     
     with gzip.open(input_file, 'rt', encoding='utf-8') as f:
-        # Read header
         header = f.readline().strip()
+        logger.info(f"Header: {header[:60]}...")
         
-        with tqdm(total=total_lines - 1, desc="Reading", unit=" lines") as pbar:
+        # Initialize file handle cache
+        cache = LRUFileHandleCache(max_handles, output_path, header)
+        
+        try:
             for line in f:
-                processed_lines += 1
-                pbar.update(1)
+                line_count += 1
                 
-                line = line.strip()
-                if not line:
-                    continue
-                
-                # Extract tax_id from protein1
-                parts = line.split('\t') if '\t' in line else line.split()
+                parts = line.split()
                 if len(parts) < 2:
                     continue
                 
-                protein1 = parts[0]
-                tax_id = get_tax_id(protein1)
+                tax_id = get_tax_id(parts[0])
                 
-                # Skip if already in cache
-                if skip_existing and tax_id in existing_tax_ids:
-                    skipped_lines += 1
+                # Skip if already cached
+                if tax_id in existing_tax_ids:
+                    skipped_count += 1
                     continue
                 
-                species_data[tax_id].append(line)
+                # Track new species
+                new_species.add(tax_id)
                 
-                # Periodically log progress
-                if processed_lines % 10000000 == 0:
-                    elapsed = time() - start_time
-                    rate = processed_lines / elapsed
-                    logger.info(f"Progress: {processed_lines:,} lines, "
-                               f"{len(species_data)} species, "
-                               f"{rate:.0f} lines/sec")
-    
-    read_time = time() - start_time
-    logger.info(f"\nPhase 1 complete in {read_time/60:.1f} minutes")
-    logger.info(f"Processed {processed_lines:,} lines")
-    logger.info(f"Skipped {skipped_lines:,} lines (already cached)")
-    logger.info(f"Found {len(species_data)} new species to write")
-    
-    if not species_data:
-        logger.info("No new species to write. All data already cached!")
-        return
-    
-    logger.info("=" * 80)
-    logger.info("Phase 2: Writing per-species files...")
-    logger.info("=" * 80)
-    
-    write_start = time()
-    written_species = 0
-    total_interactions = 0
-    
-    # Sort species by number of interactions (largest first for better progress feedback)
-    sorted_species = sorted(species_data.items(), key=lambda x: len(x[1]), reverse=True)
-    
-    with tqdm(total=len(sorted_species), desc="Writing", unit=" species") as pbar:
-        for tax_id, lines in sorted_species:
-            try:
-                # Generate filename
-                file_hash = generate_pypath_hash(tax_id)
-                filename = f"{file_hash}-{tax_id}.protein.links.detailed.{STRING_VERSION}.txt.gz"
-                filepath = output_path / filename
+                # Write to output
+                cache.write_line(tax_id, line)
                 
-                # Write file
-                with gzip.open(str(filepath), 'wt', encoding='utf-8') as out:
-                    out.write(header + '\n')
-                    for line in lines:
-                        out.write(line + '\n')
-                
-                written_species += 1
-                total_interactions += len(lines)
-                
-                pbar.update(1)
-                pbar.set_postfix({
-                    'species': tax_id,
-                    'interactions': f"{len(lines):,}"
-                })
-                
-            except Exception as e:
-                logger.error(f"Failed to write species {tax_id}: {e}")
+                # Log progress every 30 seconds
+                current_time = time()
+                if current_time - last_log_time >= 30:
+                    elapsed = current_time - start_time
+                    rate = line_count / elapsed
+                    stats = cache.get_stats()
+                    logger.info(
+                        f"Progress: {line_count/1e6:.1f}M lines, "
+                        f"{len(new_species)} new species, "
+                        f"{skipped_count/1e6:.1f}M skipped, "
+                        f"{rate/1000:.1f}K lines/sec"
+                    )
+                    last_log_time = current_time
+        
+        finally:
+            cache.close_all()
     
-    write_time = time() - write_start
     total_time = time() - start_time
+    stats = cache.get_stats()
     
     logger.info("=" * 80)
     logger.info("Summary")
     logger.info("=" * 80)
     logger.info(f"Total time: {total_time/60:.1f} minutes")
-    logger.info(f"  - Reading: {read_time/60:.1f} minutes")
-    logger.info(f"  - Writing: {write_time/60:.1f} minutes")
-    logger.info(f"Species written: {written_species}")
-    logger.info(f"Total interactions: {total_interactions:,}")
+    logger.info(f"Lines processed: {line_count:,}")
+    logger.info(f"Lines skipped (cached): {skipped_count:,}")
+    logger.info(f"New species written: {len(new_species)}")
+    logger.info(f"Total interactions written: {stats['total_lines']:,}")
     logger.info(f"Output directory: {output_dir}")
     logger.info("=" * 80)
+    
+    # Update progress file
+    progress_file = output_path / "string_download_progress.json"
+    try:
+        import json
+        progress = {'completed': [], 'total_completed': 0}
+        if progress_file.exists():
+            with open(progress_file, 'r') as pf:
+                progress = json.load(pf)
+        
+        completed_set = set(progress.get('completed', []))
+        completed_set.update(new_species)
+        
+        progress['completed'] = list(completed_set)
+        progress['total_completed'] = len(completed_set)
+        progress['timestamp'] = time()
+        
+        with open(progress_file, 'w') as pf:
+            json.dump(progress, pf, indent=2)
+        
+        logger.info(f"Updated progress file: {len(completed_set)} total species")
+    except Exception as e:
+        logger.warning(f"Could not update progress file: {e}")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Split STRING database file by species',
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        description='Split STRING database file by species (streaming)'
     )
     parser.add_argument(
         '--input', '-i', type=str, default=DEFAULT_INPUT,
-        help=f'Input protein.links.detailed file (default: {DEFAULT_INPUT})'
+        help=f'Input file (default: {DEFAULT_INPUT})'
     )
     parser.add_argument(
         '--output', '-o', type=str, default=DEFAULT_OUTPUT,
-        help=f'Output directory for cache files (default: {DEFAULT_OUTPUT})'
+        help=f'Output directory (default: {DEFAULT_OUTPUT})'
     )
     parser.add_argument(
         '--no-skip', action='store_true',
-        help='Do not skip species that already have cache files'
+        help='Do not skip existing species'
+    )
+    parser.add_argument(
+        '--max-handles', type=int, default=MAX_OPEN_FILES,
+        help=f'Max open file handles (default: {MAX_OPEN_FILES})'
     )
     
     args = parser.parse_args()
@@ -239,7 +255,8 @@ def main():
     split_string_file(
         input_file=args.input,
         output_dir=args.output,
-        skip_existing=not args.no_skip
+        skip_existing=not args.no_skip,
+        max_handles=args.max_handles
     )
 
 
