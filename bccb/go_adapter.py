@@ -6,6 +6,7 @@ from contextlib import ExitStack
 from bioregistry import normalize_curie
 
 import collections
+import gc
 import os
 import h5py
 import requests
@@ -435,6 +436,75 @@ class GO:
         if model["test_mode"]:
             self.early_stopping = 100
 
+    def _stream_go_annotations(
+        self,
+        organism: int | str,
+        fields: list[str],
+        allowed_proteins: set | None = None,
+        max_proteins: int | None = None,
+    ) -> dict:
+        """
+        Stream GO annotations with memory-efficient filtering.
+        
+        Args:
+            organism: Organism ID or name
+            fields: Fields to extract from annotations
+            allowed_proteins: If provided, only include annotations for these proteins
+            max_proteins: Maximum number of unique proteins to include
+            
+        Returns:
+            Dict of protein_id -> set of annotation tuples
+        """
+        from pypath.share import curl as pypath_curl
+        from pypath.resources import urls
+        from pypath.utils import taxonomy
+        from pypath.share import common
+        
+        organism_name = taxonomy.ensure_common_name(organism)
+        
+        all_fields = (
+            'db', 'db_object_id', 'db_object_symbol', 'qualifier', 'go_id',
+            'reference', 'evidence_code', 'with_or_from', 'aspect',
+            'db_object_name', 'db_object_synonym', 'db_object_type',
+            'taxon_and_interacting_taxon', 'date', 'assigned_By',
+            'annotation_extension', 'gene_product_form_id'
+        )
+        
+        fields = common.to_list(fields)
+        url = urls.urls['goa']['ebi_url'] % (organism_name.upper(), organism_name.lower())
+        
+        logger.info(f"Streaming GO annotations from {url}")
+        c = pypath_curl.Curl(url, silent=False, large=True)
+        
+        result = collections.defaultdict(set)
+        record = collections.namedtuple('GoAnnotation', fields)
+        proteins_seen = set()
+        
+        for line in c.result:
+            if not line.strip() or line[0] == '!':
+                continue
+            
+            line_dict = dict(zip(all_fields, line.strip().split('\t')))
+            protein_id = line_dict['db_object_id']
+            
+            # Filter by allowed proteins if specified
+            if allowed_proteins is not None and protein_id not in allowed_proteins:
+                continue
+            
+            # Check max_proteins limit
+            if max_proteins is not None:
+                if protein_id not in proteins_seen:
+                    if len(proteins_seen) >= max_proteins:
+                        continue
+                    proteins_seen.add(protein_id)
+            
+            result[protein_id].add(
+                record(**{f: line_dict.get(f, None) for f in fields})
+            )
+        
+        logger.info(f"Streamed GO annotations for {len(result)} proteins")
+        return dict(result)
+
     @validate_call
     def download_go_data(
         self,
@@ -489,10 +559,19 @@ class GO:
                 # Load SwissProt proteins based on organism to save memory
                 organism_for_swissprot = self.organism if self.organism not in ("*", None) else "*"
                 logger.info(f"Loading SwissProt proteins for organism: {organism_for_swissprot}")
-                self.swissprots = set(
+                swissprots_full = set(
                     uniprot._all_uniprots(organism=organism_for_swissprot, swissprot=True)
                 )
-                logger.info(f"Loaded {len(self.swissprots)} SwissProt proteins")
+                
+                # In test mode, limit swissprots to reduce memory
+                if self.early_stopping:
+                    logger.info(f"Test mode: limiting SwissProt proteins to {self.early_stopping}")
+                    self.swissprots = set(list(swissprots_full)[:self.early_stopping])
+                    del swissprots_full
+                    gc.collect()
+                else:
+                    self.swissprots = swissprots_full
+                logger.info(f"Using {len(self.swissprots)} SwissProt proteins")
 
                 if self.organism in ("*", None):
                     logger.debug(
@@ -577,15 +656,24 @@ class GO:
                         f"Started downloading Gene Ontology annotation data for tax id {self.organism}"
                     )
 
-                    self.go_annots = go_input.go_annotations_all(
-                        organism=self.organism,
-                        fields=[
-                            "qualifier",
-                            "go_id",
-                            "reference",
-                            "evidence_code",
-                        ],
-                    )  # returns dict of uniprot ids as keys and go term annotations as values
+                    # Use streaming method with filtering for memory efficiency
+                    if self.early_stopping:
+                        logger.info(f"Using streaming GO annotations with limit of {self.early_stopping} proteins")
+                        self.go_annots = self._stream_go_annotations(
+                            organism=self.organism,
+                            fields=["qualifier", "go_id", "reference", "evidence_code"],
+                            allowed_proteins=self.swissprots,
+                            max_proteins=self.early_stopping,
+                        )
+                    else:
+                        # Full mode - still use streaming but with swissprots filter
+                        logger.info("Using streaming GO annotations with SwissProt filter")
+                        self.go_annots = self._stream_go_annotations(
+                            organism=self.organism,
+                            fields=["qualifier", "go_id", "reference", "evidence_code"],
+                            allowed_proteins=self.swissprots,
+                            max_proteins=None,
+                        )
 
                 t1 = time()
 
@@ -599,16 +687,22 @@ class GO:
                     for et in self.domain_to_go_edge_types
                 ]
             ):
-                logger.debug("Started downloading Interpro2go data")
-                t0 = time()
+                # In test mode, skip interpro2go as it uses significant memory
+                if self.early_stopping:
+                    logger.info("Test mode: skipping Interpro2go data to save memory")
+                    self.interpro2go = {}
+                else:
+                    logger.debug("Started downloading Interpro2go data")
+                    t0 = time()
 
-                self.interpro2go = interpro.interpro_xrefs(
-                    db_type="go"
-                )  # returns dict of interpro ids as keys and go term annotations as values
-                t1 = time()
-                logger.info(
-                    f"Interpro2go data is downloaded in {round((t1-t0) / 60, 2)} mins"
-                )
+                    self.interpro2go = interpro.interpro_xrefs(
+                        db_type="go"
+                    )  # returns dict of interpro ids as keys and go term annotations as values
+                    t1 = time()
+                    logger.info(
+                        f"Interpro2go data is downloaded in {round((t1-t0) / 60, 2)} mins"
+                    )
+                    
     def retrieve_anc2vec_embedding(self, anc2vec_embedding_path: FilePath | None = None):
         logger.info("Retrieving Anc2vec go term embeddings")
 

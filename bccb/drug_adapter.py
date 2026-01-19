@@ -353,7 +353,7 @@ class Drug:
             if DrugEdgeType.DRUG_TARGET_INTERACTION in self.edge_types:
                 self.download_chembl_dti_data()
                 self.download_drugbank_dti_data()
-                self.download_pharos_dti_data()
+                # Pharos uses streaming - download happens during process_pharos_dti_data()
                 self.download_dgidb_dti_data()
                 self.download_kegg_dti_data()
                 self.download_stitch_dti_data()
@@ -1297,75 +1297,118 @@ class Drug:
 
         return ddinter_df
 
-    def download_pharos_dti_data(self):
+    def _extract_dti_from_pharos_record(self, dti: dict) -> list:
+        """Extract DTI records from a single Pharos target record."""
+        records = []
+        if not dti.get("ligands"):
+            return records
+            
+        for lig in dti["ligands"]:
+            synonyms = dict(
+                [
+                    (syn["name"], syn["value"].split(",")[0])
+                    for syn in lig.get("synonyms", [])
+                    if syn["name"] in ["ChEMBL", "DrugCentral"]
+                ]
+            )
 
-        logger.debug("Downloading Pharos DTI data")
-        t0 = time()
+            for act in lig.get("activities", []):
+                # add dtis that have activity value and type
+                if act.get("value") and act.get("type") and act["type"] != "-":
+                    if act.get("pubs"):
+                        _list = [
+                            pub["pmid"]
+                            for pub in act["pubs"]
+                            if pub.get("__typename") == "PubMed"
+                            and pub.get("pmid")
+                        ]
+                        pubmeds = "|".join(set(_list)) if _list else None
+                    else:
+                        pubmeds = None
 
-        # Pharos data is very large and can cause OOM
-        # In test mode, skip Pharos data entirely
-        if self.early_stopping:
-            logger.warning("Skipping Pharos DTI download in test mode (too memory intensive)")
-            self.pharos_dti = []
-        else:
+                    records.append(
+                        (
+                            dti.get("uniprot"),
+                            act["type"],
+                            act.get("moa"),
+                            act["value"],
+                            pubmeds,
+                            self.drugcentral_to_drugbank.get(
+                                synonyms.get("DrugCentral"), None
+                            ),
+                        )
+                    )
+        return records
+
+    def _stream_pharos_dti_data(self, chunk_size: int = 100, max_chunks: int = None):
+        """
+        Stream Pharos DTI data chunk by chunk to avoid OOM.
+        Processes each chunk immediately and yields extracted DTI records.
+        
+        Args:
+            chunk_size: Records per API call (keep at 100 to avoid timeout)
+            max_chunks: Maximum number of chunks to fetch (None for all)
+        """
+        from pypath.inputs.pharos import pharos_general, PHAROS_QUERY
+        
+        variables = {
+            'chunk_size': chunk_size,
+            'step': 0,
+            'getExpressions': False,
+            'getGtex': False,
+            'getOrthologs': False,
+            'getLigands': True,
+            'getXrefs': False,
+            'getDiseases': False,
+        }
+        
+        chunk_count = 0
+        while True:
+            if max_chunks is not None and chunk_count >= max_chunks:
+                logger.info(f"Reached max_chunks limit ({max_chunks})")
+                break
+                
+            logger.debug(f'Pharos query, chunk #{chunk_count} (step={variables["step"]})')
             try:
-                self.pharos_dti = pharos.pharos_targets(ligands=True)
+                response = pharos_general(PHAROS_QUERY, variables)
+                response = response['targets']['targets']
             except Exception as e:
-                logger.warning(f"Pharos DTI download failed: {e}")
-                self.pharos_dti = []
+                logger.warning(f"Pharos chunk {chunk_count} failed: {e}")
+                break
 
-        t1 = time()
-        logger.info(
-            f"Pharos DTI data is downloaded in {round((t1-t0) / 60, 2)} mins"
-        )
+            if not response:
+                break
+
+            # Process this chunk immediately and yield records
+            for dti in response:
+                records = self._extract_dti_from_pharos_record(dti)
+                for record in records:
+                    yield record
+            
+            # Clear chunk data from memory
+            del response
+            
+            variables['step'] += chunk_size
+            chunk_count += 1
+            
+            # Periodic gc to keep memory usage low
+            if chunk_count % 50 == 0:
+                gc.collect()
 
     def process_pharos_dti_data(self) -> pd.DataFrame:
-        if not hasattr(self, "pharos_dti"):
-            self.download_pharos_dti_data()
-
-        logger.debug("Processing Pharos DTI data")
+        logger.debug("Processing Pharos DTI data with streaming")
         t0 = time()
 
-        df_list = []
-        for dti in self.pharos_dti:
-
-            if dti["ligands"]:
-                for lig in dti["ligands"]:
-                    synonyms = dict(
-                        [
-                            (syn["name"], syn["value"].split(",")[0])
-                            for syn in lig["synonyms"]
-                            if syn["name"] in ["ChEMBL", "DrugCentral"]
-                        ]
-                    )
-
-                    for act in lig["activities"]:
-                        # add dtis that have activity value and type
-                        if act["value"] and act["type"] and act["type"] != "-":
-
-                            if act["pubs"]:
-                                _list = [
-                                    pub["pmid"]
-                                    for pub in act["pubs"]
-                                    if pub["__typename"] == "PubMed"
-                                    and pub["pmid"]
-                                ]
-                                pubmeds = "|".join(set(_list))
-                            else:
-                                pubmeds = None
-
-                            df_list.append(
-                                (
-                                    dti["uniprot"],
-                                    act["type"],
-                                    act["moa"],
-                                    act["value"],
-                                    pubmeds,
-                                    self.drugcentral_to_drugbank.get(
-                                        synonyms.get("DrugCentral"), None
-                                    ),
-                                )
-                            )
+        # Use streaming to avoid OOM - process and collect DTI records
+        # In early_stopping mode, limit chunks for testing
+        max_chunks = 10 if self.early_stopping else None
+        
+        df_list = list(self._stream_pharos_dti_data(
+            chunk_size=100, 
+            max_chunks=max_chunks
+        ))
+        
+        logger.info(f"Collected {len(df_list)} Pharos DTI records")
 
         pharos_dti_df = pd.DataFrame(
             df_list,

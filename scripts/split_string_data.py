@@ -27,11 +27,17 @@ DEFAULT_OUTPUT = "/GenSIvePFS/users/data/pypath_cache"
 STRING_VERSION = "v12.0"
 MAX_OPEN_FILES = 1000  # Maximum number of open file handles
 
-# Setup logging
+# Setup logging with forced flush
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
 )
+# Force unbuffered output
+for handler in logging.root.handlers:
+    handler.flush = sys.stdout.flush
 logger = logging.getLogger(__name__)
 
 
@@ -159,6 +165,20 @@ def split_string_file(
                 
                 tax_id = get_tax_id(parts[0])
                 
+                # Log progress every 30 seconds (before skip check to ensure logging)
+                current_time = time()
+                if current_time - last_log_time >= 30:
+                    elapsed = current_time - start_time
+                    rate = line_count / elapsed
+                    logger.info(
+                        f"Progress: {line_count/1e6:.1f}M lines, "
+                        f"{len(new_species)} new species, "
+                        f"{skipped_count/1e6:.1f}M skipped, "
+                        f"{rate/1000:.1f}K lines/sec"
+                    )
+                    sys.stdout.flush()
+                    last_log_time = current_time
+                
                 # Skip if already cached
                 if tax_id in existing_tax_ids:
                     skipped_count += 1
@@ -169,20 +189,6 @@ def split_string_file(
                 
                 # Write to output
                 cache.write_line(tax_id, line)
-                
-                # Log progress every 30 seconds
-                current_time = time()
-                if current_time - last_log_time >= 30:
-                    elapsed = current_time - start_time
-                    rate = line_count / elapsed
-                    stats = cache.get_stats()
-                    logger.info(
-                        f"Progress: {line_count/1e6:.1f}M lines, "
-                        f"{len(new_species)} new species, "
-                        f"{skipped_count/1e6:.1f}M skipped, "
-                        f"{rate/1000:.1f}K lines/sec"
-                    )
-                    last_log_time = current_time
         
         finally:
             cache.close_all()

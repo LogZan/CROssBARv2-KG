@@ -4,6 +4,7 @@ from pypath.share import curl, settings
 from pypath.inputs import reactome, uniprot, ctdbase, compath, unichem, drugbank
 from pypath.inputs import ontology
 from . import kegg_local
+from .drugbank_streaming import DrugbankStreaming
 
 from contextlib import ExitStack
 
@@ -406,16 +407,22 @@ class Pathway:
                         f"Error occured in {org} organism  in gene-pathway data downloading with an {e} error"
                     )
 
-            self.kegg_to_uniprot = {
-                v.strip(";").split(";")[0]: k
-                for k, v in uniprot.uniprot_data(
-                    "xref_kegg", 9606, True
-                ).items()
-            }
+            # Handle case where uniprot_data returns list instead of dict
+            uniprot_kegg_data = uniprot.uniprot_data("xref_kegg", 9606, True)
+            if isinstance(uniprot_kegg_data, list):
+                logger.warning("uniprot_data returned list instead of dict for xref_kegg")
+                self.kegg_to_uniprot = {}
+            else:
+                self.kegg_to_uniprot = {
+                    v.strip(";").split(";")[0]: k
+                    for k, v in uniprot_kegg_data.items()
+                    if v
+                }
 
         if PathwayEdgeType.DRUG_TO_PATHWAY in self.edge_types:
             self.kegg_drug_to_pathway = kegg_local.drug_to_pathway()
-            drugbank_data = drugbank.DrugbankFull(
+            # Use streaming DrugBank parser to avoid OOM
+            drugbank_data = DrugbankStreaming(
                 user=self.drugbank_user, passwd=self.drugbank_passwd
             )
             drugbank_drugs_external_ids = (

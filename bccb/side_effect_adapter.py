@@ -2,6 +2,7 @@ from __future__ import annotations
 from pypath.share import curl, settings
 
 from pypath.inputs import sider, drugbank, offsides, adrecs
+from bccb.drugbank_streaming import DrugbankStreaming
 
 from contextlib import ExitStack
 
@@ -172,15 +173,17 @@ class SideEffect:
                 for i in sider_meddra_tsv
             }
 
-            self.drugbank_data = drugbank.DrugbankFull(
+            # Use streaming DrugBank parser to avoid OOM
+            self.drugbank_data = DrugbankStreaming(
                 user=self.drugbank_user, passwd=self.drugbank_passwd
             )
-            drugbank_drug_names = self.drugbank_data.drugbank_drugs_full(
-                fields=["name"]
-            )
-            self.drugbank_name_to_drugbank_id_dict = {
-                i.name.lower(): i.drugbank_id for i in drugbank_drug_names
-            }
+            # Build name to drugbank_id mapping from streaming data
+            self.drugbank_name_to_drugbank_id_dict = {}
+            for drug in self.drugbank_data.iter_drugs():
+                name = drug.get('name')
+                drugbank_id = drug.get('drugbank_id')
+                if name and drugbank_id:
+                    self.drugbank_name_to_drugbank_id_dict[name.lower()] = drugbank_id
 
             sider_drug = sider.sider_drug_names()
             self.cid_to_sider_drug_name = {

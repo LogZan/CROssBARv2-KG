@@ -180,9 +180,13 @@ class EC:
             )
             props = {}
             if ECNodeField.NAME.value in self.ec_node_fields:
-                props[ECNodeField.NAME.value] = (
-                    level_1_dict["name"].replace("|", ",").replace("'", "^")
-                )
+                name_val = level_1_dict["name"]
+                if name_val is not None:
+                    props[ECNodeField.NAME.value] = (
+                        name_val.replace("|", ",").replace("'", "^")
+                    )
+                else:
+                    props[ECNodeField.NAME.value] = ""
 
             node_list.append((level_1_id, label, props))
 
@@ -193,11 +197,15 @@ class EC:
                     )
                     props = {}
                     if ECNodeField.NAME.value in self.ec_node_fields:
-                        props[ECNodeField.NAME.value] = (
-                            level_2_dict["name"]
-                            .replace("|", ",")
-                            .replace("'", "^")
-                        )
+                        name_val = level_2_dict["name"]
+                        if name_val is not None:
+                            props[ECNodeField.NAME.value] = (
+                                name_val
+                                .replace("|", ",")
+                                .replace("'", "^")
+                            )
+                        else:
+                            props[ECNodeField.NAME.value] = ""
 
                     node_list.append((level_2_id, label, props))
 
@@ -208,11 +216,15 @@ class EC:
                             )
                             props = {}
                             if ECNodeField.NAME.value in self.ec_node_fields:
-                                props[ECNodeField.NAME.value] = (
-                                    level_3_dict["name"]
-                                    .replace("|", ",")
-                                    .replace("'", "^")
-                                )
+                                name_val = level_3_dict["name"]
+                                if name_val is not None:
+                                    props[ECNodeField.NAME.value] = (
+                                        name_val
+                                        .replace("|", ",")
+                                        .replace("'", "^")
+                                    )
+                                else:
+                                    props[ECNodeField.NAME.value] = ""
 
                             node_list.append((level_3_id, label, props))
 
@@ -401,7 +413,18 @@ class EC:
 
         self.ec_dict = {}
 
-        for entry, name in self.enzyme_classes:
+        for ec_tuple in self.enzyme_classes:
+            # Handle both old format (entry, name) and new format (part1, part2, part3, name)
+            if len(ec_tuple) == 2:
+                entry, name = ec_tuple
+            elif len(ec_tuple) == 4:
+                # New pypath format: construct entry from parts, replace None with '-'
+                parts = [str(p) if p is not None else '-' for p in ec_tuple[:3]]
+                entry = '.'.join(parts) + '.-' if parts[2] != '-' else '.'.join(parts[:2]) + '.-.-' if parts[1] != '-' else parts[0] + '.-.-.-'
+                name = ec_tuple[3]
+            else:
+                continue
+            
             entry = entry.replace(" ", "")
 
             # if there is 3 - in the entry, it is a level 1 entry
@@ -411,7 +434,7 @@ class EC:
             elif entry.count("-") == 2:
                 level_1_entry = entry.split(".")[0] + ".-.-.-"
                 if level_1_entry not in self.ec_dict:
-                    self.ec_dict[level_1_entry] = {}
+                    self.ec_dict[level_1_entry] = {"name": None}
                 self.ec_dict[level_1_entry][entry] = {"name": name}
             # if there is 1 - in the entry, it is a level 3 entry
             elif entry.count("-") == 1:
@@ -423,9 +446,9 @@ class EC:
                     + ".-.-"
                 )
                 if level_1_entry not in self.ec_dict:
-                    self.ec_dict[level_1_entry] = {}
+                    self.ec_dict[level_1_entry] = {"name": None}
                 if level_2_entry not in self.ec_dict[level_1_entry]:
-                    self.ec_dict[level_1_entry][level_2_entry] = {}
+                    self.ec_dict[level_1_entry][level_2_entry] = {"name": None}
                 self.ec_dict[level_1_entry][level_2_entry][entry] = {
                     "name": name,
                     "entries": [],
@@ -450,6 +473,16 @@ class EC:
             if not self.enzymes[level_4]["de"].startswith(
                 "Transferred entry"
             ) and not self.enzymes[level_4]["de"].startswith("Deleted"):
+                # Ensure all parent levels exist in the hierarchy
+                if level_1_entry not in self.ec_dict:
+                    self.ec_dict[level_1_entry] = {"name": None}
+                if level_2_entry not in self.ec_dict[level_1_entry]:
+                    self.ec_dict[level_1_entry][level_2_entry] = {"name": None}
+                if level_3_entry not in self.ec_dict[level_1_entry][level_2_entry]:
+                    self.ec_dict[level_1_entry][level_2_entry][level_3_entry] = {
+                        "name": None,
+                        "entries": [],
+                    }
                 self.ec_dict[level_1_entry][level_2_entry][level_3_entry][
                     "entries"
                 ].append(level_4)

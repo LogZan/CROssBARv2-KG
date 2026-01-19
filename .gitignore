@@ -22,3 +22,5 @@ data/CROssBARv2-KG
 data/neo4j-import
 data/embeddings
 data/malacards
+
+nohup.out

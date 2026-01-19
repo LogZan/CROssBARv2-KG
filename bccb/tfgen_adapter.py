@@ -175,12 +175,19 @@ class TFGene:
                 collectri.collectri_interactions()
             )
 
-            self.uniprot_to_entrez = {
-                k: v.strip(";").split(";")[0]
-                for k, v in uniprot.uniprot_data(
-                    "xref_geneid", 9606, True
-                ).items()
-            }
+            uniprot_data = uniprot.uniprot_data("xref_geneid", 9606, True)
+            # Handle both dict and list return types from newer pypath versions
+            if isinstance(uniprot_data, list):
+                self.uniprot_to_entrez = {
+                    entry.get('accession', entry.get('uniprot')): entry.get('xref_geneid', '').strip(";").split(";")[0]
+                    for entry in uniprot_data
+                    if entry.get('xref_geneid')
+                }
+            else:
+                self.uniprot_to_entrez = {
+                    k: v.strip(";").split(";")[0]
+                    for k, v in uniprot_data.items()
+                }
 
         t1 = time()
         logger.info(
@@ -193,18 +200,28 @@ class TFGene:
 
         self.trrust_interactions = []
         self.trrust_gene_symbol_to_entrez_id = {}
-        if 9606 in self.organism:
-            self.trrust_gene_symbol_to_entrez_id |= {
-                entry["gene_symbol"]: entry["entrez_id"]
-                for entry in trrust.scrape_human()
-            }
-            self.trrust_interactions.extend(trrust.trrust_human())
-        if 10090 in self.organism:
-            self.trrust_gene_symbol_to_entrez_id |= {
-                entry["gene_symbol"]: entry["entrez_id"]
-                for entry in trrust.scrape_mouse()
-            }
-            self.trrust_interactions.extend(trrust.trrust_mouse())
+        
+        try:
+            if 9606 in self.organism:
+                human_data = list(trrust.trrust_human())
+                self.trrust_interactions.extend(human_data)
+                # Build gene symbol to entrez mapping from interactions
+                for interaction in human_data:
+                    if hasattr(interaction, 'tf_symbol') and hasattr(interaction, 'tf_entrez'):
+                        self.trrust_gene_symbol_to_entrez_id[interaction.tf_symbol] = interaction.tf_entrez
+                    if hasattr(interaction, 'target_symbol') and hasattr(interaction, 'target_entrez'):
+                        self.trrust_gene_symbol_to_entrez_id[interaction.target_symbol] = interaction.target_entrez
+                        
+            if 10090 in self.organism:
+                mouse_data = list(trrust.trrust_mouse())
+                self.trrust_interactions.extend(mouse_data)
+                for interaction in mouse_data:
+                    if hasattr(interaction, 'tf_symbol') and hasattr(interaction, 'tf_entrez'):
+                        self.trrust_gene_symbol_to_entrez_id[interaction.tf_symbol] = interaction.tf_entrez
+                    if hasattr(interaction, 'target_symbol') and hasattr(interaction, 'target_entrez'):
+                        self.trrust_gene_symbol_to_entrez_id[interaction.target_symbol] = interaction.target_entrez
+        except Exception as e:
+            logger.warning(f"TRRUST data download failed: {e}. Continuing without TRRUST data.")
 
         t1 = time()
         logger.info(

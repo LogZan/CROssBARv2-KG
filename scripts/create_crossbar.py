@@ -1,5 +1,6 @@
 import sys
 import gc
+import yaml
 from pathlib import Path
 
 project_root = Path(__file__).resolve().parent.parent
@@ -91,6 +92,63 @@ export_as_csv = True
 # Flag for test mode
 TEST_MODE = True
 
+# Flag to dynamically update schema with discovered annotation/feature types
+# Set to True on first run to add new types, then set to False for subsequent runs
+UPDATE_SCHEMA_DYNAMICALLY = False
+
+
+def update_schema_with_dynamic_types(schema_path: str, annotation_types: set, feature_types: set):
+    """
+    Dynamically update schema_config.yaml with discovered annotation and feature types.
+    Only needed on first run or when new annotation/feature types are discovered.
+    
+    Args:
+        schema_path: Path to schema_config.yaml
+        annotation_types: Set of annotation type names (e.g., 'biophysicochemical_properties_annotation')
+        feature_types: Set of feature type names (e.g., 'zinc_finger_feature')
+    """
+    # Load existing schema
+    with open(schema_path, 'r', encoding='utf-8') as f:
+        schema = yaml.safe_load(f)
+    
+    added_types = []
+    
+    # Add missing annotation types (inherit from functional annotation)
+    for ann_type in annotation_types:
+        # Convert to schema key format (underscore to space)
+        schema_key = ann_type.replace('_', ' ')
+        if schema_key not in schema:
+            schema[schema_key] = {
+                'is_a': 'functional annotation',
+                'represented_as': 'node',
+                'label_in_input': ann_type,
+            }
+            added_types.append(schema_key)
+    
+    # Add missing feature types (inherit from sequence feature)
+    for feat_type in feature_types:
+        # Convert to schema key format (underscore to space)
+        schema_key = feat_type.replace('_', ' ')
+        if schema_key not in schema:
+            schema[schema_key] = {
+                'is_a': 'sequence feature',
+                'represented_as': 'node',
+                'label_in_input': feat_type,
+            }
+            added_types.append(schema_key)
+    
+    if added_types:
+        # Write updated schema
+        with open(schema_path, 'w', encoding='utf-8') as f:
+            yaml.dump(schema, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        print(f"Schema updated with {len(added_types)} new types:")
+        for t in sorted(added_types):
+            print(f"  + {t}")
+    else:
+        print("No new schema types needed.")
+    
+    return added_types
+
 # dirs
 output_dir_path = "/GenSIvePFS/users/clzeng/workspace/CROssBARv2-KG/biocypher-out"
 
@@ -154,6 +212,16 @@ uniprot_adapter = UniprotSwissprot(
     )
 
 uniprot_adapter.download_uniprot_data(cache=CACHE, retries=6)
+
+# Optionally update schema with dynamically discovered types
+if UPDATE_SCHEMA_DYNAMICALLY:
+    print("Updating schema with dynamically discovered annotation/feature types...")
+    schema_path = str(project_root / "config/schema_config.yaml")
+    annotation_types = set(uniprot_adapter.annotation_nodes.keys())
+    feature_types = set(uniprot_adapter.feature_nodes.keys())
+    update_schema_with_dynamic_types(schema_path, annotation_types, feature_types)
+    print("Schema updated. Please restart the script for changes to take effect.")
+    sys.exit(0)
 
 uniprot_nodes = uniprot_adapter.get_nodes()
 uniprot_edges = uniprot_adapter.get_edges()
