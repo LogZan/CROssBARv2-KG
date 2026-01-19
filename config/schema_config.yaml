@@ -195,6 +195,7 @@ ec number:
 
 # UniProt Keyword (from keywords vocabulary)
 uniprot keyword:
+  is_a: NamedThing
   represented_as: node
   preferred_id: uniprot_keyword
   label_in_input: uniprot_keyword
@@ -207,6 +208,7 @@ uniprot keyword:
 
 # Functional Annotation - Parent Node
 functional annotation:
+  is_a: NamedThing
   represented_as: node
   preferred_id: internal
   label_in_input: functional_annotation
@@ -269,6 +271,7 @@ activity regulation annotation:
 
 # Sequence Feature - Parent Node
 sequence feature:
+  is_a: NamedThing
   represented_as: node
   preferred_id: internal
   label_in_input: sequence_feature

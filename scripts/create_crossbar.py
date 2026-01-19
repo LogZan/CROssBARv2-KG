@@ -103,6 +103,10 @@ uniprot_node_types = [
     UniprotNodeType.PROTEIN,
     UniprotNodeType.GENE,
     UniprotNodeType.ORGANISM,
+    # Extended types from SwissProt
+    UniprotNodeType.FUNCTIONAL_ANNOTATION,
+    UniprotNodeType.SEQUENCE_FEATURE,
+    UniprotNodeType.UNIPROT_DISEASE,
 ]
 
 uniprot_node_fields = [
@@ -127,6 +131,11 @@ uniprot_node_fields = [
 uniprot_edge_types = [
      UniprotEdgeType.PROTEIN_TO_ORGANISM,
      UniprotEdgeType.GENE_TO_PROTEIN,
+     # Extended edge types from SwissProt
+     UniprotEdgeType.PROTEIN_TO_KEYWORD,
+     UniprotEdgeType.PROTEIN_TO_ANNOTATION,
+     UniprotEdgeType.PROTEIN_TO_FEATURE,
+     UniprotEdgeType.PROTEIN_TO_DISEASE,
 ]
 
 uniprot_id_type = [
@@ -149,15 +158,22 @@ uniprot_adapter.download_uniprot_data(cache=CACHE, retries=6)
 uniprot_nodes = uniprot_adapter.get_nodes()
 uniprot_edges = uniprot_adapter.get_edges()
 
-
+# Write basic nodes and edges
 bc.write_nodes(uniprot_nodes)
 bc.write_edges(uniprot_edges)
 
+# Write extended nodes and edges from SwissProt
+uniprot_extended_nodes = uniprot_adapter.get_all_extended_nodes()
+uniprot_extended_edges = uniprot_adapter.get_all_extended_edges()
 
-if export_as_csv:
-    uniprot_adapter.export_data_to_csv(path=output_dir_path,
-                                    node_data=uniprot_nodes,
-                                    edge_data=uniprot_edges)
+bc.write_nodes(uniprot_extended_nodes)
+bc.write_edges(uniprot_extended_edges)
+
+print(f"SwissProt extended nodes and edges written successfully.")
+print(f"  Annotation types: {len(uniprot_adapter.annotation_nodes)}")
+print(f"  Feature types: {len(uniprot_adapter.feature_nodes)}")
+print(f"  Disease nodes: {len(uniprot_adapter.disease_nodes)}")
+print(f"  Proteins with keywords: {len(uniprot_adapter.protein_keywords)}")
 
 # PPI
 ppi_adapter = PPI(organism=9606, 
