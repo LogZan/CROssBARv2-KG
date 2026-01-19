@@ -45,6 +45,10 @@ class UniprotNodeType(Enum, metaclass=UniprotEnumMeta):
     GENE = auto()
     ORGANISM = auto()
     CELLULAR_COMPARTMENT = auto()
+    # Extended types from SwissProt
+    FUNCTIONAL_ANNOTATION = auto()
+    SEQUENCE_FEATURE = auto()
+    UNIPROT_DISEASE = auto()
 
 
 class UniprotNodeField(Enum, metaclass=UniprotEnumMeta):
@@ -146,6 +150,12 @@ class UniprotEdgeType(Enum, metaclass=UniprotEnumMeta):
 
     PROTEIN_TO_ORGANISM = auto()
     GENE_TO_PROTEIN = auto()
+    # Extended edge types from SwissProt
+    PROTEIN_TO_KEYWORD = auto()
+    PROTEIN_TO_ANNOTATION = auto()
+    PROTEIN_TO_FEATURE = auto()
+    PROTEIN_TO_DISEASE = auto()
+    PROTEIN_INTERACTS_PROTEIN = auto()
 
 
 class UniprotIDField(Enum, metaclass=UniprotEnumMeta):
@@ -256,6 +266,17 @@ class UniprotSwissprot:
         self.prott5_embedding_df = None
         self.esm2_embedding_df = None
         self.entrez_id_to_nucleotide_transformer_embedding = {}
+        
+        # Extended data storage for SwissProt
+        self.raw_entries = {}  # protein_id -> raw entry for extended processing
+        self.annotation_nodes = {}  # annotation_id -> (node_label, props)
+        self.feature_nodes = {}  # feature_id -> (node_label, props)
+        self.disease_nodes = {}  # disease_id -> props
+        self.protein_keywords = {}  # protein_id -> [keyword_ids]
+        self.protein_annotations = {}  # protein_id -> [(annotation_id, edge_props)]
+        self.protein_features = {}  # protein_id -> [(feature_id, edge_props)]
+        self.protein_diseases = {}  # protein_id -> [(disease_id, edge_props)]
+        self.protein_interactions = {}  # protein_id -> [(target_protein_id, edge_props)]
 
     def _read_ligands_set(self) -> set:
         if not os.path.isfile("data/ligands_curated.csv"):
@@ -442,6 +463,9 @@ class UniprotSwissprot:
                 self.data[UniprotNodeField.SUBCELLULAR_LOCATION.value][protein_id] = locations
                 for loc in locations:
                     self.locations.add(loc)
+
+        # Extended data extraction for SwissProt
+        self._extract_extended_data(protein_id, entry)
 
     def _extract_cross_refs(self, protein_id: str, xrefs: list):
         """Extract cross-references by database type."""
@@ -998,3 +1022,482 @@ class UniprotSwissprot:
 
                 df.to_csv(full_path, index=False)
                 logger.info(f"{_type.capitalize()} data is written: {full_path}")
+
+    # ========================================
+    # Extended SwissProt Data Extraction
+    # ========================================
+
+    def _extract_extended_data(self, protein_id: str, entry: dict):
+        """Extract extended data from SwissProt entry (comments, features, keywords, diseases)."""
+        
+        # Extract keywords
+        if UniprotEdgeType.PROTEIN_TO_KEYWORD in self.edge_types:
+            self._extract_keywords(protein_id, entry)
+        
+        # Extract functional annotations (comments)
+        if UniprotEdgeType.PROTEIN_TO_ANNOTATION in self.edge_types:
+            self._extract_annotations(protein_id, entry)
+        
+        # Extract sequence features
+        if UniprotEdgeType.PROTEIN_TO_FEATURE in self.edge_types:
+            self._extract_features(protein_id, entry)
+        
+        # Extract diseases
+        if UniprotEdgeType.PROTEIN_TO_DISEASE in self.edge_types:
+            self._extract_diseases(protein_id, entry)
+        
+        # Extract protein-protein interactions
+        if UniprotEdgeType.PROTEIN_INTERACTS_PROTEIN in self.edge_types:
+            self._extract_interactions(protein_id, entry)
+
+    def _extract_keywords(self, protein_id: str, entry: dict):
+        """Extract keywords from entry."""
+        keywords = entry.get("keywords", [])
+        keyword_ids = []
+        for kw in keywords:
+            kw_id = kw.get("id")
+            if kw_id:
+                keyword_ids.append(kw_id)
+        if keyword_ids:
+            self.protein_keywords[protein_id] = keyword_ids
+
+    def _extract_annotations(self, protein_id: str, entry: dict):
+        """Dynamically extract all comment types as functional annotations."""
+        comments = entry.get("comments", [])
+        annotations = []
+        
+        for idx, comment in enumerate(comments):
+            comment_type = comment.get("commentType", "UNKNOWN")
+            
+            # Skip INTERACTION (handled separately) and SUBCELLULAR LOCATION (handled in basic extraction)
+            if comment_type in ("INTERACTION",):
+                continue
+            
+            # Generate annotation ID
+            annotation_id = f"{protein_id}_{comment_type}_{idx}"
+            
+            # Determine node label from comment type
+            node_label = comment_type.lower().replace(" ", "_").replace("-", "_") + "_annotation"
+            
+            # Extract text content
+            text = self._get_comment_text(comment)
+            
+            # Edge properties
+            edge_props = {
+                "text": text,
+            }
+            
+            # Handle specific comment types for additional properties
+            if comment_type == "CATALYTIC ACTIVITY":
+                reaction = comment.get("reaction", {})
+                edge_props["reaction_name"] = reaction.get("name")
+                ec_entries = reaction.get("ecNumber")
+                if ec_entries:
+                    edge_props["rhea_id"] = None
+                # Extract cross-references
+                xrefs = reaction.get("reactionCrossReferences", [])
+                rhea_ids = [x.get("id") for x in xrefs if x.get("database") == "Rhea"]
+                chebi_ids = [x.get("id") for x in xrefs if x.get("database") == "ChEBI"]
+                if rhea_ids:
+                    edge_props["rhea_id"] = rhea_ids[0]
+                if chebi_ids:
+                    edge_props["chebi_ids"] = chebi_ids
+            
+            elif comment_type == "COFACTOR":
+                cofactors = comment.get("cofactors", [])
+                if cofactors:
+                    edge_props["cofactor_name"] = cofactors[0].get("name")
+                    cf_xrefs = cofactors[0].get("cofactorCrossReference", {})
+                    if cf_xrefs.get("database") == "ChEBI":
+                        edge_props["cofactor_chebi_id"] = cf_xrefs.get("id")
+            
+            elif comment_type == "SUBCELLULAR LOCATION":
+                locs = comment.get("subcellularLocations", [])
+                if locs:
+                    loc_info = locs[0].get("location", {})
+                    edge_props["location_id"] = loc_info.get("id")
+            
+            # Store annotation node (just the label, no content)
+            if node_label not in self.annotation_nodes:
+                self.annotation_nodes[node_label] = {}
+            
+            # Store protein -> annotation relationship
+            annotations.append((node_label, edge_props))
+        
+        if annotations:
+            self.protein_annotations[protein_id] = annotations
+
+    def _get_comment_text(self, comment: dict) -> str:
+        """Extract text from various comment structures."""
+        comment_type = comment.get("commentType", "")
+        
+        # Standard text field
+        texts = comment.get("texts", [])
+        if texts:
+            return texts[0].get("value", "")
+        
+        # Subcellular location
+        if comment_type == "SUBCELLULAR LOCATION":
+            locs = comment.get("subcellularLocations", [])
+            if locs:
+                loc_values = []
+                for loc_data in locs:
+                    loc_name = loc_data.get("location", {}).get("value")
+                    if loc_name:
+                        loc_values.append(loc_name)
+                return "; ".join(loc_values)
+        
+        # Catalytic activity
+        if comment_type == "CATALYTIC ACTIVITY":
+            reaction = comment.get("reaction", {})
+            return reaction.get("name", "")
+        
+        # Cofactor
+        if comment_type == "COFACTOR":
+            cofactors = comment.get("cofactors", [])
+            if cofactors:
+                names = [c.get("name", "") for c in cofactors if c.get("name")]
+                return "; ".join(names)
+        
+        return ""
+
+    def _extract_features(self, protein_id: str, entry: dict):
+        """Dynamically extract all feature types as sequence features."""
+        features = entry.get("features", [])
+        feature_data = []
+        
+        for idx, feature in enumerate(features):
+            feature_type = feature.get("type", "UNKNOWN")
+            
+            # Generate feature ID
+            feature_id = f"{protein_id}_{feature_type}_{idx}"
+            
+            # Determine node label from feature type
+            node_label = feature_type.lower().replace(" ", "_").replace("-", "_") + "_feature"
+            
+            # Extract location
+            location = feature.get("location", {})
+            start = location.get("start", {}).get("value")
+            end = location.get("end", {}).get("value")
+            
+            # Edge properties
+            edge_props = {
+                "start_position": start,
+                "end_position": end,
+                "description": feature.get("description", ""),
+                "feature_id": feature.get("featureId"),
+            }
+            
+            # Handle alternative sequence (variants, mutagenesis)
+            alt_seq = feature.get("alternativeSequence", {})
+            if alt_seq:
+                edge_props["original_sequence"] = alt_seq.get("originalSequence")
+                alt_seqs = alt_seq.get("alternativeSequences", [])
+                if alt_seqs:
+                    edge_props["alternative_sequence"] = alt_seqs[0]
+            
+            # Handle ligand (binding sites)
+            ligand = feature.get("ligand", {})
+            if ligand:
+                edge_props["ligand_name"] = ligand.get("name")
+                edge_props["ligand_id"] = ligand.get("id")
+            
+            # Store feature node (just the label)
+            if node_label not in self.feature_nodes:
+                self.feature_nodes[node_label] = {}
+            
+            # Store protein -> feature relationship
+            feature_data.append((node_label, edge_props))
+        
+        if feature_data:
+            self.protein_features[protein_id] = feature_data
+
+    def _extract_diseases(self, protein_id: str, entry: dict):
+        """Extract disease associations from DISEASE comments."""
+        comments = entry.get("comments", [])
+        disease_data = []
+        
+        for comment in comments:
+            if comment.get("commentType") != "DISEASE":
+                continue
+            
+            disease = comment.get("disease", {})
+            if not disease:
+                continue
+            
+            disease_id = disease.get("diseaseAccession")
+            if not disease_id:
+                continue
+            
+            # Store disease node
+            if disease_id not in self.disease_nodes:
+                self.disease_nodes[disease_id] = {
+                    "disease_id": disease.get("diseaseId"),
+                    "acronym": disease.get("acronym"),
+                    "description": disease.get("description"),
+                }
+                # Extract OMIM ID from cross-reference
+                xref = disease.get("diseaseCrossReference", {})
+                if xref.get("database") == "MIM":
+                    self.disease_nodes[disease_id]["omim_id"] = xref.get("id")
+            
+            # Edge properties
+            edge_props = {
+                "note": comment.get("note", {}).get("texts", [{}])[0].get("value") if comment.get("note") else None
+            }
+            
+            disease_data.append((disease_id, edge_props))
+        
+        if disease_data:
+            self.protein_diseases[protein_id] = disease_data
+
+    def _extract_interactions(self, protein_id: str, entry: dict):
+        """Extract protein-protein interactions from INTERACTION comments."""
+        comments = entry.get("comments", [])
+        interactions = []
+        
+        for comment in comments:
+            if comment.get("commentType") != "INTERACTION":
+                continue
+            
+            for interaction in comment.get("interactions", []):
+                interactant1 = interaction.get("interactantOne", {})
+                interactant2 = interaction.get("interactantTwo", {})
+                
+                # Get target protein ID
+                target_id = interactant2.get("uniProtKBAccession")
+                if not target_id:
+                    continue
+                
+                # Edge properties
+                edge_props = {
+                    "number_of_experiments": interaction.get("numberOfExperiments"),
+                    "organism_differ": interaction.get("organismDiffer", False),
+                    "intact_id_source": interactant1.get("intActId"),
+                    "intact_id_target": interactant2.get("intActId"),
+                }
+                
+                interactions.append((target_id, edge_props))
+        
+        if interactions:
+            self.protein_interactions[protein_id] = interactions
+
+    # ========================================
+    # Extended Node Generators
+    # ========================================
+
+    def get_annotation_nodes(
+        self,
+        label_prefix: str = ""
+    ) -> Generator[tuple[str, str, dict], None, None]:
+        """
+        Yield Functional Annotation nodes.
+        """
+        if UniprotNodeType.FUNCTIONAL_ANNOTATION not in self.node_types:
+            return
+
+        logger.info("Preparing Functional Annotation nodes...")
+        
+        base_props = {
+            "source": self.data_source,
+            "licence": self.data_licence,
+            "version": self.data_version,
+        }
+        
+        # Yield one node per annotation type
+        for node_label in self.annotation_nodes.keys():
+            node_id = node_label
+            yield (node_id, node_label, base_props.copy())
+
+    def get_feature_nodes(
+        self,
+        label_prefix: str = ""
+    ) -> Generator[tuple[str, str, dict], None, None]:
+        """
+        Yield Sequence Feature nodes.
+        """
+        if UniprotNodeType.SEQUENCE_FEATURE not in self.node_types:
+            return
+
+        logger.info("Preparing Sequence Feature nodes...")
+        
+        base_props = {
+            "source": self.data_source,
+            "licence": self.data_licence,
+            "version": self.data_version,
+        }
+        
+        # Yield one node per feature type
+        for node_label in self.feature_nodes.keys():
+            node_id = node_label
+            yield (node_id, node_label, base_props.copy())
+
+    def get_disease_nodes(
+        self,
+        disease_label: str = "uniprot_disease"
+    ) -> Generator[tuple[str, str, dict], None, None]:
+        """
+        Yield UniProt Disease nodes.
+        """
+        if UniprotNodeType.UNIPROT_DISEASE not in self.node_types:
+            return
+
+        logger.info("Preparing UniProt Disease nodes...")
+        
+        for disease_id, props in self.disease_nodes.items():
+            node_id = self.add_prefix_to_id("uniprot.disease", disease_id)
+            node_props = {
+                "source": self.data_source,
+                "licence": self.data_licence,
+                "version": self.data_version,
+                "disease_accession": disease_id,
+                **props
+            }
+            yield (node_id, disease_label, node_props)
+
+    # ========================================
+    # Extended Edge Generators
+    # ========================================
+
+    def get_keyword_edges(
+        self,
+        edge_label: str = "protein_has_keyword"
+    ) -> Generator[tuple[None, str, str, str, dict], None, None]:
+        """
+        Yield Protein -> Keyword edges.
+        """
+        if UniprotEdgeType.PROTEIN_TO_KEYWORD not in self.edge_types:
+            return
+
+        logger.info("Preparing Protein -> Keyword edges...")
+        
+        base_props = {
+            "source": self.data_source,
+            "licence": self.data_licence,
+            "version": self.data_version,
+        }
+        
+        for protein_id, keyword_ids in self.protein_keywords.items():
+            source_id = self.add_prefix_to_id("uniprot", protein_id)
+            for kw_id in keyword_ids:
+                target_id = self.add_prefix_to_id("uniprot.keyword", kw_id)
+                yield (None, source_id, target_id, edge_label, base_props.copy())
+
+    def get_annotation_edges(
+        self,
+        edge_label: str = "protein_has_annotation"
+    ) -> Generator[tuple[None, str, str, str, dict], None, None]:
+        """
+        Yield Protein -> Functional Annotation edges with text properties.
+        """
+        if UniprotEdgeType.PROTEIN_TO_ANNOTATION not in self.edge_types:
+            return
+
+        logger.info("Preparing Protein -> Annotation edges...")
+        
+        base_props = {
+            "source": self.data_source,
+            "licence": self.data_licence,
+            "version": self.data_version,
+        }
+        
+        for protein_id, annotations in self.protein_annotations.items():
+            source_id = self.add_prefix_to_id("uniprot", protein_id)
+            for node_label, edge_props in annotations:
+                target_id = node_label  # Node ID is the label itself
+                props = base_props.copy()
+                props.update(edge_props)
+                yield (None, source_id, target_id, edge_label, props)
+
+    def get_feature_edges(
+        self,
+        edge_label: str = "protein_has_feature"
+    ) -> Generator[tuple[None, str, str, str, dict], None, None]:
+        """
+        Yield Protein -> Sequence Feature edges with position properties.
+        """
+        if UniprotEdgeType.PROTEIN_TO_FEATURE not in self.edge_types:
+            return
+
+        logger.info("Preparing Protein -> Feature edges...")
+        
+        base_props = {
+            "source": self.data_source,
+            "licence": self.data_licence,
+            "version": self.data_version,
+        }
+        
+        for protein_id, features in self.protein_features.items():
+            source_id = self.add_prefix_to_id("uniprot", protein_id)
+            for node_label, edge_props in features:
+                target_id = node_label  # Node ID is the label itself
+                props = base_props.copy()
+                props.update(edge_props)
+                yield (None, source_id, target_id, edge_label, props)
+
+    def get_disease_edges(
+        self,
+        edge_label: str = "protein_associated_with_uniprot_disease"
+    ) -> Generator[tuple[None, str, str, str, dict], None, None]:
+        """
+        Yield Protein -> Disease edges.
+        """
+        if UniprotEdgeType.PROTEIN_TO_DISEASE not in self.edge_types:
+            return
+
+        logger.info("Preparing Protein -> Disease edges...")
+        
+        base_props = {
+            "source": self.data_source,
+            "licence": self.data_licence,
+            "version": self.data_version,
+        }
+        
+        for protein_id, diseases in self.protein_diseases.items():
+            source_id = self.add_prefix_to_id("uniprot", protein_id)
+            for disease_id, edge_props in diseases:
+                target_id = self.add_prefix_to_id("uniprot.disease", disease_id)
+                props = base_props.copy()
+                props.update(edge_props)
+                yield (None, source_id, target_id, edge_label, props)
+
+    def get_interaction_edges(
+        self,
+        edge_label: str = "uniprot_protein_interacts_with_protein"
+    ) -> Generator[tuple[None, str, str, str, dict], None, None]:
+        """
+        Yield Protein -> Protein interaction edges from UniProt.
+        """
+        if UniprotEdgeType.PROTEIN_INTERACTS_PROTEIN not in self.edge_types:
+            return
+
+        logger.info("Preparing UniProt Protein Interaction edges...")
+        
+        base_props = {
+            "source": self.data_source,
+            "licence": self.data_licence,
+            "version": self.data_version,
+        }
+        
+        for protein_id, interactions in self.protein_interactions.items():
+            source_id = self.add_prefix_to_id("uniprot", protein_id)
+            for target_protein_id, edge_props in interactions:
+                target_id = self.add_prefix_to_id("uniprot", target_protein_id)
+                props = base_props.copy()
+                props.update(edge_props)
+                yield (None, source_id, target_id, edge_label, props)
+
+    def get_all_extended_nodes(self) -> Generator[tuple[str, str, dict], None, None]:
+        """Yield all extended nodes (annotations, features, diseases)."""
+        yield from self.get_annotation_nodes()
+        yield from self.get_feature_nodes()
+        yield from self.get_disease_nodes()
+
+    def get_all_extended_edges(self) -> Generator[tuple[None, str, str, str, dict], None, None]:
+        """Yield all extended edges (keywords, annotations, features, diseases, interactions)."""
+        yield from self.get_keyword_edges()
+        yield from self.get_annotation_edges()
+        yield from self.get_feature_edges()
+        yield from self.get_disease_edges()
+        yield from self.get_interaction_edges()
+

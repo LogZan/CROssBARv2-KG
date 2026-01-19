@@ -30,6 +30,18 @@ protein:
     organism_id: int
     sequence: str
     prott5_embedding: float[]
+    # Extended properties from SwissProt
+    uniprot_kb_id: str
+    secondary_accessions: str[]
+    protein_existence: str
+    annotation_score: float
+    first_public_date: str
+    last_annotation_update_date: str
+    entry_version: int
+    sequence_version: int
+    recommended_short_names: str[]
+    alternative_names_json: str
+    protein_flag: str
   
 organism taxon:
   represented_as: node
@@ -176,6 +188,156 @@ ec number:
   properties:
     name: str
     rxnfp_embedding: float[]
+
+# ---
+# UniProt SwissProt Extended Nodes
+# ---
+
+# UniProt Keyword (from keywords vocabulary)
+uniprot keyword:
+  represented_as: node
+  preferred_id: uniprot_keyword
+  label_in_input: uniprot_keyword
+  properties:
+    name: str
+    definition: str
+    category: str
+    synonyms: str[]
+    reviewed_protein_count: int
+
+# Functional Annotation - Parent Node
+functional annotation:
+  represented_as: node
+  preferred_id: internal
+  label_in_input: functional_annotation
+
+# Functional Annotation - Child Nodes (inherit from parent)
+function annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: function_annotation
+
+subunit annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: subunit_annotation
+
+subcellular location annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: subcellular_location_annotation
+
+tissue specificity annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: tissue_specificity_annotation
+
+similarity annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: similarity_annotation
+
+ptm annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: ptm_annotation
+
+catalytic activity annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: catalytic_activity_annotation
+
+pathway annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: pathway_annotation
+
+cofactor annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: cofactor_annotation
+
+domain annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: domain_annotation
+
+activity regulation annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: activity_regulation_annotation
+
+# Sequence Feature - Parent Node
+sequence feature:
+  represented_as: node
+  preferred_id: internal
+  label_in_input: sequence_feature
+
+# Sequence Feature - Child Nodes (inherit from parent)
+domain feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: domain_feature
+
+binding site feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: binding_site_feature
+
+active site feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: active_site_feature
+
+modified residue feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: modified_residue_feature
+
+glycosylation feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: glycosylation_feature
+
+disulfide bond feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: disulfide_bond_feature
+
+transmembrane feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: transmembrane_feature
+
+natural variant feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: natural_variant_feature
+
+mutagenesis feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: mutagenesis_feature
+
+chain feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: chain_feature
+
+region feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: region_feature
+
+# UniProt Disease (inherits from disease)
+uniprot disease:
+  is_a: disease
+  represented_as: node
+  preferred_id: uniprot_disease
+  label_in_input: uniprot_disease
+  properties:
+    disease_accession: str
+    acronym: str
 
 # Cell: # relevant?
   # represented_as: node
@@ -809,3 +971,111 @@ gene to gene regulatory association:
   # source: drug
   # target: small molecule
   # label_in_input: Contains_Active_Ingredient
+
+# ---
+# UniProt SwissProt Extended Edges
+# ---
+
+# Protein -> Keyword
+protein to keyword association:
+  is_a: association
+  represented_as: edge
+  label_as_edge: protein_has_keyword
+  source: protein
+  target: uniprot keyword
+  label_in_input: protein_has_keyword
+
+# Keyword -> Keyword (hierarchy)
+keyword hierarchical association:
+  is_a: association
+  represented_as: edge
+  label_as_edge: keyword_is_a_keyword
+  source: uniprot keyword
+  target: uniprot keyword
+  label_in_input: keyword_is_a_keyword
+
+# Keyword -> GO mappings
+keyword to biological process association:
+  is_a: association
+  represented_as: edge
+  label_as_edge: keyword_maps_to_biological_process
+  source: uniprot keyword
+  target: biological process
+  label_in_input: keyword_maps_to_biological_process
+
+keyword to molecular function association:
+  is_a: association
+  represented_as: edge
+  label_as_edge: keyword_maps_to_molecular_function
+  source: uniprot keyword
+  target: molecular function
+  label_in_input: keyword_maps_to_molecular_function
+
+keyword to cellular component association:
+  is_a: association
+  represented_as: edge
+  label_as_edge: keyword_maps_to_cellular_component
+  source: uniprot keyword
+  target: cellular component
+  label_in_input: keyword_maps_to_cellular_component
+
+# Protein -> Functional Annotation (edge carries text content)
+protein to functional annotation association:
+  is_a: association
+  represented_as: edge
+  label_as_edge: protein_has_annotation
+  source: protein
+  target: functional annotation
+  label_in_input: protein_has_annotation
+  properties:
+    text: str
+    evidence_code: str
+    molecule: str
+    reaction_name: str
+    rhea_id: str
+    chebi_ids: str[]
+    cofactor_name: str
+    location_id: str
+
+# Protein -> Sequence Feature (edge carries position and sequence info)
+protein to sequence feature association:
+  is_a: association
+  represented_as: edge
+  label_as_edge: protein_has_feature
+  source: protein
+  target: sequence feature
+  label_in_input: protein_has_feature
+  properties:
+    start_position: int
+    end_position: int
+    description: str
+    original_sequence: str
+    alternative_sequence: str
+    ligand_name: str
+    ligand_id: str
+    feature_id: str
+
+# Protein -> UniProt Disease
+protein to uniprot disease association:
+  is_a: association
+  represented_as: edge
+  label_as_edge: protein_associated_with_uniprot_disease
+  source: protein
+  target: uniprot disease
+  label_in_input: protein_associated_with_uniprot_disease
+  properties:
+    note: str
+
+# UniProt Protein Interaction (from UniProt INTERACTION comments)
+uniprot protein interaction:
+  is_a: pairwise molecular interaction
+  represented_as: edge
+  label_as_edge: uniprot_protein_interacts_with_protein
+  source: protein
+  target: protein
+  label_in_input: uniprot_protein_interacts_with_protein
+  properties:
+    number_of_experiments: int
+    organism_differ: bool
+    intact_id_source: str
+    intact_id_target: str
