@@ -354,7 +354,7 @@ class Pathway:
                     ]
                     self.chebi_to_drugbank = {
                         list(v)[0]: k
-                        for k, v in unichem.unichem_mapping("drugbank", "chebi").items()
+                        for k, v in unichem.unichem_mapping("DrugBank", "chebi").items()
                     }
                     logger.info(f"Loaded {len(self.reactome_chebi_pathway)} Reactome chebi-pathway relations")
                 except Exception as e:
@@ -412,8 +412,11 @@ class Pathway:
             # Handle case where uniprot_data returns list instead of dict
             uniprot_kegg_data = uniprot.uniprot_data("xref_kegg", 9606, True)
             if isinstance(uniprot_kegg_data, list):
-                logger.warning("uniprot_data returned list instead of dict for xref_kegg")
-                self.kegg_to_uniprot = {}
+                if not uniprot_kegg_data:
+                    self.kegg_to_uniprot = {}
+                else:
+                    logger.warning(f"uniprot_data returned list: {uniprot_kegg_data[:5]}. Using empty mapping.")
+                    self.kegg_to_uniprot = {}
             else:
                 self.kegg_to_uniprot = {
                     v.strip(";").split(";")[0]: k

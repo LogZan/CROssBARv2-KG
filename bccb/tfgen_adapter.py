@@ -222,8 +222,8 @@ class TFGene:
                         self.trrust_gene_symbol_to_entrez_id[interaction.tf_symbol] = interaction.tf_entrez
                     if hasattr(interaction, 'target_symbol') and hasattr(interaction, 'target_entrez'):
                         self.trrust_gene_symbol_to_entrez_id[interaction.target_symbol] = interaction.target_entrez
-        except Exception as e:
-            logger.warning(f"TRRUST data download failed: {e}. Continuing without TRRUST data.")
+        except (TypeError, Exception) as e:
+            logger.warning(f"TRRUST data download failed: {e}. 'NoneType' error suggests pypath failed to download data. Continuing without TRRUST data.")
 
         t1 = time()
         logger.info(

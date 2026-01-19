@@ -406,7 +406,26 @@ class PPI:
         try:
             self.uniprot_to_gene = uniprot.uniprot_data("gene_names", "*", True)
             self.uniprot_to_tax = uniprot.uniprot_data("organism_id", "*", True)
-            # Check if results are dicts, if not, use empty dicts
+            
+            # Fix: Handle list return type from pypath
+            if isinstance(self.uniprot_to_gene, list):
+                if not self.uniprot_to_gene:
+                    self.uniprot_to_gene = {}
+                else:
+                    # Logic depends on what the list contains. If it's empty, use dict.
+                    # If it's a list, it might be an error or unexpected format.
+                    # Based on logs, it returns empty list [] when it fails or finds nothing.
+                    logger.warning(f"uniprot_to_gene returned list: {self.uniprot_to_gene[:5] if self.uniprot_to_gene else '[]'}. Attempting to use empty mapping.")
+                    self.uniprot_to_gene = {}
+            
+            if isinstance(self.uniprot_to_tax, list):
+                if not self.uniprot_to_tax:
+                    self.uniprot_to_tax = {}
+                else:
+                    logger.warning(f"uniprot_to_tax returned list: {self.uniprot_to_tax[:5] if self.uniprot_to_tax else '[]'}. Attempting to use empty mapping.")
+                    self.uniprot_to_tax = {}
+
+            # Check if results are dicts, if not, use empty dicts (safety fallback)
             if not isinstance(self.uniprot_to_gene, dict):
                 logger.warning(f"uniprot_to_gene returned {type(self.uniprot_to_gene)} instead of dict. Using empty mapping.")
                 self.uniprot_to_gene = {}
@@ -636,6 +655,15 @@ class PPI:
         # map string ids to swissprot ids
         try:
             uniprot_to_string = uniprot.uniprot_data("xref_string", "*", True)
+            
+            # Fix: Handle list return type from pypath
+            if isinstance(uniprot_to_string, list):
+                 if not uniprot_to_string:
+                     uniprot_to_string = {}
+                 else:
+                     logger.warning(f"uniprot_to_string returned list: {uniprot_to_string[:5] if uniprot_to_string else '[]'}. Attempting to use empty mapping.")
+                     uniprot_to_string = {}
+
             # Check if result is a dict, if not (e.g., empty list), use empty dict
             if not isinstance(uniprot_to_string, dict):
                 logger.warning(f"uniprot_to_string returned {type(uniprot_to_string)} instead of dict. Using empty mapping.")

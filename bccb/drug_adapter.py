@@ -888,6 +888,13 @@ class Drug:
         # map entrez gene ids to swissprot ids
         uniprot_to_entrez = uniprot.uniprot_data("xref_geneid", "*", True)
         self.entrez_to_uniprot = collections.defaultdict(list)
+        if isinstance(uniprot_to_entrez, list):
+            if not uniprot_to_entrez:
+                uniprot_to_entrez = {}
+            else:
+                logger.warning(f"uniprot_to_entrez returned list: {uniprot_to_entrez[:5]}. Using empty mapping.")
+                uniprot_to_entrez = {}
+
         if isinstance(uniprot_to_entrez, dict):
             for k, v in uniprot_to_entrez.items():
                 if v:
