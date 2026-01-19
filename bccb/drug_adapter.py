@@ -332,6 +332,8 @@ class Drug:
             debug: if True, turns on debug mode in pypath.
             retries: number of retries in case of download error.
         """
+        # Set adapter-specific cache directory
+        cache_config.set_adapter_cache('drug')
 
         with ExitStack() as stack:
 

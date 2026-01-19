@@ -155,6 +155,8 @@ class HPO:
             debug: if True, turns on debug mode in pypath.
             retries: number of retries in case of download error.
         """
+        # Set adapter-specific cache directory
+        cache_config.set_adapter_cache('phenotype')
 
         with ExitStack() as stack:
             stack.enter_context(settings.settings.context(retries=retries))

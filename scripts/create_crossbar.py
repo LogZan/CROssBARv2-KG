@@ -212,9 +212,23 @@ uniprot_node_fields = [
     UniprotNodeField.KEGG_IDS,
     UniprotNodeField.PROTEOME,
     UniprotNodeField.SEQUENCE,
-    # UniprotNodeField.PROTT5_EMBEDDING,  # Disabled: slow to load
-    # UniprotNodeField.ESM2_EMBEDDING,     # Disabled: slow to load
-    # UniprotNodeField.NT_EMBEDDING,       # Disabled: slow to load
+    # Extended protein properties
+    UniprotNodeField.UNIPROT_KB_ID,
+    UniprotNodeField.SECONDARY_ACCESSIONS,
+    UniprotNodeField.PROTEIN_EXISTENCE,
+    UniprotNodeField.ANNOTATION_SCORE,
+    UniprotNodeField.FIRST_PUBLIC_DATE,
+    UniprotNodeField.LAST_ANNOTATION_UPDATE_DATE,
+    UniprotNodeField.ENTRY_VERSION,
+    UniprotNodeField.SEQUENCE_VERSION,
+    UniprotNodeField.RECOMMENDED_SHORT_NAMES,
+    UniprotNodeField.EC_NUMBERS,
+    UniprotNodeField.ALTERNATIVE_NAMES_JSON,
+    UniprotNodeField.PROTEIN_FLAG,
+    # Embeddings (disabled: slow to load)
+    # UniprotNodeField.PROTT5_EMBEDDING,
+    # UniprotNodeField.ESM2_EMBEDDING,
+    # UniprotNodeField.NT_EMBEDDING,
 ]
 
 uniprot_edge_types = [
@@ -387,49 +401,43 @@ finally:
         del drug_adapter
     aggressive_memory_cleanup("Drug")
 
-# compound - skip in test mode due to memory constraints
-if not TEST_MODE:
-    try:
-        compound_adapter = Compound(
-            stitch_organism=9606,
-            export_csv=export_as_csv, 
-            output_dir=output_dir_path,
-            test_mode=TEST_MODE,
-            low_memory_mode=True  # Enable memory optimization
-        )
-        compound_adapter.download_compound_data(cache=CACHE)
-        compound_adapter.process_compound_data()
-        bc.write_nodes(compound_adapter.get_compound_nodes())
-        bc.write_edges(compound_adapter.get_cti_edges())
-    except Exception as e:
-        print(f"WARNING: Compound adapter failed: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        if 'compound_adapter' in dir():
-            del compound_adapter
-        aggressive_memory_cleanup("Compound")
-else:
-    print("Skipping Compound adapter in test mode to save memory")
 
-# orthology - skip in test mode due to memory constraints
-if not TEST_MODE:
-    try:
-        orthology_adapter = Orthology(
-            export_csv=export_as_csv, 
-            output_dir=output_dir_path,
-            test_mode=TEST_MODE
-        )
-        orthology_adapter.download_orthology_data(cache=CACHE)
-        bc.write_edges(orthology_adapter.get_orthology_edges())
-    except Exception as e:
-        print(f"WARNING: Orthology adapter failed: {e}")
-    finally:
-        if 'orthology_adapter' in dir():
-            del orthology_adapter
-        aggressive_memory_cleanup("Orthology")
-else:
-    print("Skipping Orthology adapter in test mode to save memory")
+try:
+    compound_adapter = Compound(
+        stitch_organism=9606,
+        export_csv=export_as_csv, 
+        output_dir=output_dir_path,
+        test_mode=TEST_MODE,
+        low_memory_mode=True  # Enable memory optimization
+    )
+    compound_adapter.download_compound_data(cache=CACHE)
+    compound_adapter.process_compound_data()
+    bc.write_nodes(compound_adapter.get_compound_nodes())
+    bc.write_edges(compound_adapter.get_cti_edges())
+except Exception as e:
+    print(f"WARNING: Compound adapter failed: {e}")
+    import traceback
+    traceback.print_exc()
+finally:
+    if 'compound_adapter' in dir():
+        del compound_adapter
+    aggressive_memory_cleanup("Compound")
+
+
+try:
+    orthology_adapter = Orthology(
+        export_csv=export_as_csv, 
+        output_dir=output_dir_path,
+        test_mode=TEST_MODE
+    )
+    orthology_adapter.download_orthology_data(cache=CACHE)
+    bc.write_edges(orthology_adapter.get_orthology_edges())
+except Exception as e:
+    print(f"WARNING: Orthology adapter failed: {e}")
+finally:
+    if 'orthology_adapter' in dir():
+        del orthology_adapter
+    aggressive_memory_cleanup("Orthology")
 
 # disease
 try:

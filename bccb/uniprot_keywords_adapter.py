@@ -269,23 +269,23 @@ class UniprotKeywords:
                         target_id = self.add_prefix_to_id("uniprot.keyword", parent_id)
                         yield (None, source_id, target_id, hierarchy_label, base_props.copy())
 
-            # GO mapping edges (Keyword -> GO Term)
-            if KeywordEdgeType.KEYWORD_TO_GO in self.edge_types:
-                for go_entry in entry.get("geneOntologies", []):
-                    go_id = go_entry.get("goId")
-                    go_name = go_entry.get("name")
-                    if go_id:
-                        target_id = self.add_prefix_to_id("go", go_id)
+            # # GO mapping edges (Keyword -> GO Term)
+            # if KeywordEdgeType.KEYWORD_TO_GO in self.edge_types:
+            #     for go_entry in entry.get("geneOntologies", []):
+            #         go_id = go_entry.get("goId")
+            #         go_name = go_entry.get("name")
+            #         if go_id:
+            #             target_id = self.add_prefix_to_id("go", go_id)
                         
-                        # Determine edge label based on GO category (would need lookup)
-                        # For now, use a generic label or derive from category
-                        category = entry.get("category", {}).get("name", "").lower()
-                        edge_label = go_mapping_labels.get(category, "keyword_maps_to_go")
+            #             # Determine edge label based on GO category (would need lookup)
+            #             # For now, use a generic label or derive from category
+            #             category = entry.get("category", {}).get("name", "").lower()
+            #             edge_label = go_mapping_labels.get(category, "keyword_maps_to_go")
                         
-                        edge_props = base_props.copy()
-                        edge_props["go_name"] = go_name
+            #             edge_props = base_props.copy()
+            #             edge_props["go_name"] = go_name
                         
-                        yield (None, source_id, target_id, edge_label, edge_props)
+            #             yield (None, source_id, target_id, edge_label, edge_props)
 
     def add_prefix_to_id(
         self, prefix: str = None, identifier: str = None, sep: str = ":"

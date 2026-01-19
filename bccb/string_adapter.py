@@ -95,6 +95,8 @@ class STRING:
             
         To do: Make arguments of string.string_links_interactions selectable for user.
         """
+        # Set adapter-specific cache directory
+        cache_config.set_adapter_cache('string')
 
         t0 = time()
 

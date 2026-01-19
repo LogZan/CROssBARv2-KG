@@ -23,4 +23,4 @@ data/neo4j-import
 data/embeddings
 data/malacards
 
-nohup.out
+*nohup*

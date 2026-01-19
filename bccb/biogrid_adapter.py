@@ -102,6 +102,8 @@ class BioGRID:
             
         To do: Make arguments of biogrid.biogrid_all_interactions selectable for user. 
         """
+         # Set adapter-specific cache directory
+        cache_config.set_adapter_cache('biogrid')
         
         logger.info(f"This is the link of BioGRID data we downloaded:{urls.urls['biogrid']['all']}. Please check if it is up to date")    
         logger.debug("Started downloading BioGRID data")

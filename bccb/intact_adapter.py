@@ -99,6 +99,8 @@ class IntAct:
             
         To do: Make arguments of intact.intact_interactions selectable for user.
         """
+        # Set adapter-specific cache directory
+        cache_config.set_adapter_cache('intact')
                      
         logger.debug("Started downloading IntAct data")
         logger.info(f"This is the link of IntAct data we downloaded:{urls.urls['intact']['mitab']}. Please check if it is up to date")

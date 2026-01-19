@@ -352,6 +352,10 @@ class UniprotSwissprot:
             esm2_embedding_path: path to ESM2 embeddings h5 file
             nucleotide_transformer_embedding_path: path to NT embeddings h5 file
         """
+        # Set adapter-specific cache directory for pypath utilities (e.g. mapping)
+        from . import cache_config
+        cache_config.set_adapter_cache('uniprot')
+        
         self._load_json_data()
 
         # Load embeddings if requested

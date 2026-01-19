@@ -524,6 +524,9 @@ class GO:
             debug: if True, turns on debug mode in pypath.
             retries: number of retries in case of download error.
         """
+        # Set adapter-specific cache directory
+        from . import cache_config
+        cache_config.set_adapter_cache('go')
 
         # stack pypath context managers
         with ExitStack() as stack:

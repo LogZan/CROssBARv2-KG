@@ -23,7 +23,7 @@ from collections import OrderedDict
 
 # Configuration
 DEFAULT_INPUT = "/GenSIvePFS/users/data/STRING/protein.links.detailed.v12.0.txt.gz"
-DEFAULT_OUTPUT = "/GenSIvePFS/users/data/pypath_cache"
+DEFAULT_OUTPUT = "/GenSIvePFS/users/data/pypath_cache/string"
 STRING_VERSION = "v12.0"
 MAX_OPEN_FILES = 1000  # Maximum number of open file handles
 
@@ -57,12 +57,14 @@ class LRUFileHandleCache:
     LRU cache for file handles with automatic closing of old handles.
     """
     
-    def __init__(self, max_handles: int, output_dir: Path, header: str):
+    def __init__(self, max_handles: int, output_dir: Path, header: str, buffer_size: int = 10000):
         self.max_handles = max_handles
         self.output_dir = output_dir
         self.header = header
         self.handles = OrderedDict()  # tax_id -> file handle
         self.line_counts = {}  # tax_id -> number of lines written
+        self.buffers = {} # tax_id -> list of lines
+        self.buffer_size = buffer_size
         
     def get_handle(self, tax_id: str):
         """Get or create file handle for a tax_id."""
@@ -79,30 +81,54 @@ class LRUFileHandleCache:
         # Close oldest handle if at limit
         if len(self.handles) >= self.max_handles:
             oldest_tax_id, oldest_handle = self.handles.popitem(last=False)
+            self._flush_buffer(oldest_tax_id) # Write remaining lines before closing
             oldest_handle.close()
+            # Clean up buffer for closed handle if exists (should be empty after flush)
+            if oldest_tax_id in self.buffers:
+                del self.buffers[oldest_tax_id]
         
-        # Open new handle
-        handle = gzip.open(str(filepath), 'wt', encoding='utf-8')
+        # Open new handle with fast compression
+        handle = gzip.open(str(filepath), 'wt', encoding='utf-8', compresslevel=1)
         handle.write(self.header + '\n')
         self.handles[tax_id] = handle
         self.line_counts[tax_id] = 0
+        self.buffers[tax_id] = []
         
         return handle
     
     def write_line(self, tax_id: str, line: str):
-        """Write a line to the appropriate file."""
-        handle = self.get_handle(tax_id)
-        handle.write(line)
+        """Buffer line and write if buffer full."""
+        # Ensure buffer exists
+        if tax_id not in self.buffers:
+            self.buffers[tax_id] = []
+            
+        self.buffers[tax_id].append(line)
         self.line_counts[tax_id] = self.line_counts.get(tax_id, 0) + 1
+        
+        # Flush if buffer is large enough
+        if len(self.buffers[tax_id]) >= self.buffer_size:
+            self._flush_buffer(tax_id)
+            
+    def _flush_buffer(self, tax_id: str):
+        """Write buffered lines to file."""
+        if tax_id in self.buffers and self.buffers[tax_id]:
+            handle = self.get_handle(tax_id)
+            handle.write('\n'.join(self.buffers[tax_id]) + '\n')
+            self.buffers[tax_id] = []
     
     def close_all(self):
-        """Close all open handles."""
+        """Flush all buffers and close all open handles."""
+        # Flush all pending buffers first
+        for tax_id in list(self.buffers.keys()):
+            self._flush_buffer(tax_id)
+            
         for handle in self.handles.values():
             try:
                 handle.close()
             except:
                 pass
         self.handles.clear()
+        self.buffers.clear()
     
     def get_stats(self) -> dict:
         """Get statistics."""
@@ -117,7 +143,8 @@ def split_string_file(
     input_file: str,
     output_dir: str,
     skip_existing: bool = True,
-    max_handles: int = MAX_OPEN_FILES
+    max_handles: int = MAX_OPEN_FILES,
+    start_line: int = 0
 ):
     """
     Split the large STRING file into per-species files using streaming.
@@ -138,6 +165,8 @@ def split_string_file(
     logger.info(f"Input file: {input_file}")
     logger.info(f"Output directory: {output_dir}")
     logger.info(f"Max open file handles: {max_handles}")
+    if start_line > 0:
+        logger.info(f"Resuming from line: {start_line:,}")
     logger.info("=" * 80)
     logger.info("Streaming processing...")
     logger.info("=" * 80)
@@ -152,6 +181,43 @@ def split_string_file(
         header = f.readline().strip()
         logger.info(f"Header: {header[:60]}...")
         
+        # Fast-forward if needed
+        if start_line > 0:
+            logger.info(f"Fast-forwarding {start_line:,} lines...")
+            from itertools import islice
+            # Consume lines efficiently
+            # We subtract 1 because header is already read
+            lines_to_skip = start_line
+            
+            # Using loop with islice is memory efficient
+            # Skipping in chunks to allow progress logging
+            chunk_size = 1_000_000
+            skipped_so_far = 0
+            
+            while skipped_so_far < lines_to_skip:
+                remaining = lines_to_skip - skipped_so_far
+                current_chunk = min(remaining, chunk_size)
+                
+                # Consume chunk
+                for _ in islice(f, current_chunk):
+                    pass
+                    
+                skipped_so_far += current_chunk
+                line_count += current_chunk
+                
+                # Log progress
+                if time() - last_log_time >= 10:
+                    rate = skipped_so_far / (time() - start_time)
+                    logger.info(
+                        f"Skipping: {skipped_so_far/1e6:.1f}M / {lines_to_skip/1e6:.1f}M lines, "
+                        f"{rate/1e6:.1f}M lines/sec"
+                    )
+                    sys.stdout.flush()
+                    last_log_time = time()
+            
+            logger.info("Fast-forward complete. Resuming processing...")
+            last_log_time = time()
+
         # Initialize file handle cache
         cache = LRUFileHandleCache(max_handles, output_path, header)
         
@@ -251,6 +317,10 @@ def main():
         '--max-handles', type=int, default=MAX_OPEN_FILES,
         help=f'Max open file handles (default: {MAX_OPEN_FILES})'
     )
+    parser.add_argument(
+        '--start-line', type=int, default=0,
+        help='Line number to resume from (skips first N lines)'
+    )
     
     args = parser.parse_args()
     
@@ -262,7 +332,8 @@ def main():
         input_file=args.input,
         output_dir=args.output,
         skip_existing=not args.no_skip,
-        max_handles=args.max_handles
+        max_handles=args.max_handles,
+        start_line=args.start_line
     )
 
 
