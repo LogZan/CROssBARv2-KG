@@ -203,18 +203,19 @@ class SideEffect:
 
         if SideEffectEdgeType.DRUG_TO_SIDE_EFFECT in self.edge_types:
             if not hasattr(self, "drugbank_data"):
-                self.drugbank_data = drugbank.DrugbankFull(
+                # Use streaming DrugBank parser to avoid OOM
+                self.drugbank_data = DrugbankStreaming(
                     user=self.drugbank_user, passwd=self.drugbank_passwd
                 )
 
-            drugbank_external_ids = (
-                self.drugbank_data.drugbank_external_ids_full()
-            )
-            self.rxcui_to_drugbank = {
-                v.get("RxCUI"): k
-                for k, v in drugbank_external_ids.items()
-                if v.get("RxCUI")
-            }
+            # Build rxcui_to_drugbank mapping from streaming data
+            self.rxcui_to_drugbank = {}
+            for drug in self.drugbank_data.iter_drugs():
+                drugbank_id = drug.get('drugbank_id')
+                external_ids = drug.get('external_identifiers', {})
+                rxcui = external_ids.get('RxCUI')
+                if rxcui and drugbank_id:
+                    self.rxcui_to_drugbank[rxcui] = drugbank_id
 
         self.offsides_data = list(offsides.offsides_side_effects())
 

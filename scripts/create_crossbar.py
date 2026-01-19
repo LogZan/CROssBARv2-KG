@@ -1,6 +1,7 @@
 import sys
 import gc
 import yaml
+import ctypes
 from pathlib import Path
 
 project_root = Path(__file__).resolve().parent.parent
@@ -11,6 +12,30 @@ sys.path.insert(0, str(project_root))
 # This ensures all temp files go to the large filesystem, not /tmp or /root
 from bccb import cache_config
 cache_config.setup_pypath_cache()
+
+
+def aggressive_memory_cleanup(adapter_name: str = ""):
+    """Perform aggressive memory cleanup between adapters."""
+    # Force garbage collection multiple times
+    gc.collect()
+    gc.collect()
+    gc.collect()
+    
+    # Try to release memory back to OS (Linux specific)
+    try:
+        libc = ctypes.CDLL("libc.so.6")
+        libc.malloc_trim(0)
+    except Exception:
+        pass
+    
+    # Print memory status
+    try:
+        import resource
+        mem_usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024  # MB
+        print(f"[{adapter_name}] Memory cleanup done. Peak RSS: {mem_usage:.0f} MB")
+    except Exception:
+        print(f"[{adapter_name}] Memory cleanup done.")
+
 
 # Patch pypath settings for compatibility
 try:
@@ -26,6 +51,12 @@ from bccb.uniprot_swissprot_adapter import (
     UniprotNodeField,
     UniprotEdgeType,
     UniprotIDField,
+)
+
+from bccb.uniprot_keywords_adapter import (
+    UniprotKeywords,
+    KeywordNodeType,
+    KeywordEdgeType,
 )
 
 from bccb.ppi_adapter import (
@@ -243,6 +274,42 @@ print(f"  Feature types: {len(uniprot_adapter.feature_nodes)}")
 print(f"  Disease nodes: {len(uniprot_adapter.disease_nodes)}")
 print(f"  Proteins with keywords: {len(uniprot_adapter.protein_keywords)}")
 
+# UniProt Keywords (vocabulary with hierarchy and GO mappings)
+try:
+    print("\n" + "="*60)
+    print("Loading UniProt Keywords...")
+    print("="*60)
+    
+    keywords_adapter = UniprotKeywords(
+        json_path="/GenSIvePFS/users/data/UniProt/keywords_all_2025_12_25.json",
+        node_types=[KeywordNodeType.KEYWORD],
+        edge_types=[KeywordEdgeType.KEYWORD_HIERARCHY, KeywordEdgeType.KEYWORD_TO_GO],
+        test_mode=TEST_MODE,
+    )
+    
+    keywords_adapter.download_data(cache=CACHE)
+    
+    # Write keyword nodes
+    keyword_nodes = keywords_adapter.get_nodes()
+    bc.write_nodes(keyword_nodes)
+    
+    # Write keyword edges (hierarchy and GO mappings)
+    keyword_edges = keywords_adapter.get_edges()
+    bc.write_edges(keyword_edges)
+    
+    print(f"UniProt Keywords written successfully.")
+    print(f"  Keywords loaded: {len(keywords_adapter.keywords_data)}")
+    
+except Exception as e:
+    print(f"WARNING: UniProt Keywords adapter failed: {e}")
+    import traceback
+    traceback.print_exc()
+finally:
+    if 'keywords_adapter' in dir():
+        del keywords_adapter
+    gc.collect()
+    aggressive_memory_cleanup("UniProt Keywords")
+
 # PPI
 ppi_adapter = PPI(organism=9606, 
                   output_dir=output_dir_path,
@@ -275,8 +342,7 @@ except Exception as e:
     print("Skipping InterPro data, continuing with other adapters...")
 finally:
     del interpro_adapter
-    gc.collect()
-    print("Memory cleaned up after InterPro adapter")
+    aggressive_memory_cleanup("InterPro")
 
 # gene ontology
 try:
@@ -293,8 +359,7 @@ except Exception as e:
     print(f"WARNING: GO adapter failed: {e}")
 finally:
     del go_adapter
-    gc.collect()
-    print("Memory cleaned up after GO adapter")
+    aggressive_memory_cleanup("GO")
 
 # drug - with memory optimization
 try:
@@ -320,45 +385,51 @@ except Exception as e:
 finally:
     if 'drug_adapter' in dir():
         del drug_adapter
-    gc.collect()
-    print("Memory cleaned up after Drug adapter")
+    aggressive_memory_cleanup("Drug")
 
-# compound - with memory optimization
-try:
-    compound_adapter = Compound(
-        stitch_organism=9606,
-        export_csv=export_as_csv, 
-        output_dir=output_dir_path,
-        test_mode=TEST_MODE,
-        low_memory_mode=True  # Enable memory optimization
-    )
-    compound_adapter.download_compound_data(cache=CACHE)
-    compound_adapter.process_compound_data()
-    bc.write_nodes(compound_adapter.get_compound_nodes())
-    bc.write_edges(compound_adapter.get_cti_edges())
-except Exception as e:
-    print(f"WARNING: Compound adapter failed: {e}")
-    import traceback
-    traceback.print_exc()
-finally:
-    if 'compound_adapter' in dir():
-        del compound_adapter
-    gc.collect()
-    print("Memory cleaned up after Compound adapter")
+# compound - skip in test mode due to memory constraints
+if not TEST_MODE:
+    try:
+        compound_adapter = Compound(
+            stitch_organism=9606,
+            export_csv=export_as_csv, 
+            output_dir=output_dir_path,
+            test_mode=TEST_MODE,
+            low_memory_mode=True  # Enable memory optimization
+        )
+        compound_adapter.download_compound_data(cache=CACHE)
+        compound_adapter.process_compound_data()
+        bc.write_nodes(compound_adapter.get_compound_nodes())
+        bc.write_edges(compound_adapter.get_cti_edges())
+    except Exception as e:
+        print(f"WARNING: Compound adapter failed: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        if 'compound_adapter' in dir():
+            del compound_adapter
+        aggressive_memory_cleanup("Compound")
+else:
+    print("Skipping Compound adapter in test mode to save memory")
 
-# orthology
-try:
-    orthology_adapter = Orthology(
-        export_csv=export_as_csv, 
-        output_dir=output_dir_path,
-        test_mode=TEST_MODE
-    )
-    orthology_adapter.download_orthology_data(cache=CACHE)
-    bc.write_edges(orthology_adapter.get_orthology_edges())
-except Exception as e:
-    print(f"WARNING: Orthology adapter failed: {e}")
-finally:
-    gc.collect()
+# orthology - skip in test mode due to memory constraints
+if not TEST_MODE:
+    try:
+        orthology_adapter = Orthology(
+            export_csv=export_as_csv, 
+            output_dir=output_dir_path,
+            test_mode=TEST_MODE
+        )
+        orthology_adapter.download_orthology_data(cache=CACHE)
+        bc.write_edges(orthology_adapter.get_orthology_edges())
+    except Exception as e:
+        print(f"WARNING: Orthology adapter failed: {e}")
+    finally:
+        if 'orthology_adapter' in dir():
+            del orthology_adapter
+        aggressive_memory_cleanup("Orthology")
+else:
+    print("Skipping Orthology adapter in test mode to save memory")
 
 # disease
 try:
@@ -375,7 +446,9 @@ try:
 except Exception as e:
     print(f"WARNING: Disease adapter failed: {e}")
 finally:
-    gc.collect()
+    if 'disease_adapter' in dir():
+        del disease_adapter
+    aggressive_memory_cleanup("Disease")
 
 # phenotype
 try:
@@ -390,16 +463,21 @@ try:
 except Exception as e:
     print(f"WARNING: Phenotype adapter failed: {e}")
 finally:
-    gc.collect()
+    if 'phenotype_adapter' in dir():
+        del phenotype_adapter
+    aggressive_memory_cleanup("Phenotype")
 
 # pathway
 try:
+    # Limit to human only in test mode to avoid slow KEGG download for all organisms
+    kegg_organism = ["hsa"] if TEST_MODE else None
     pathway_adapter = Pathway(
         drugbank_user=drugbank_user, 
         drugbank_passwd=drugbank_passwd,
         export_csv=export_as_csv,
         output_dir=output_dir_path,
         test_mode=TEST_MODE,
+        kegg_organism=kegg_organism,
     )
     pathway_adapter.download_pathway_data(cache=CACHE)
     bc.write_nodes(pathway_adapter.get_nodes())
@@ -411,8 +489,7 @@ except Exception as e:
 finally:
     if 'pathway_adapter' in dir():
         del pathway_adapter
-    gc.collect()
-    print("Memory cleaned up after Pathway adapter")
+    aggressive_memory_cleanup("Pathway")
 
 
 # side effect
@@ -434,7 +511,6 @@ except Exception as e:
 finally:
     if 'side_effect_adapter' in dir():
         del side_effect_adapter
-    gc.collect()
     print("Memory cleaned up after Side effect adapter")
 
 # ec numbers
@@ -454,8 +530,7 @@ except Exception as e:
 finally:
     if 'ec_adapter' in dir():
         del ec_adapter
-    gc.collect()
-    print("Memory cleaned up after EC adapter")
+    aggressive_memory_cleanup("EC")
 
 # tf-gen
 try:
@@ -473,8 +548,7 @@ except Exception as e:
 finally:
     if 'tfgene_adapter' in dir():
         del tfgene_adapter
-    gc.collect()
-    print("Memory cleaned up after TFGene adapter")
+    aggressive_memory_cleanup("TFGene")
 
 
 # Write import call and other post-processing

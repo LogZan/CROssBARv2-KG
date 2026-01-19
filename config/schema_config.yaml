@@ -32,6 +32,7 @@ protein:
     entry_version: int
     sequence_version: int
     recommended_short_names: str[]
+    ec_numbers: str[]
     alternative_names_json: str
     protein_flag: str
 organism taxon:

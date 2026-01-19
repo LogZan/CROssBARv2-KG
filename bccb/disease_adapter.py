@@ -12,6 +12,7 @@ from pypath.inputs import (
     uniprot,
     humsavar,
 )
+from bccb.drugbank_streaming import DrugbankStreaming
 # Use compatibility layer for chembl and unichem
 from . import pypath_compat as chembl_compat
 from . import pypath_compat  # For unichem_mapping
@@ -374,17 +375,17 @@ class Disease:
                 relation_type="chemical_disease"
             )
 
-            self.drugbank_data = drugbank.DrugbankFull(
+            # Use streaming DrugBank parser to avoid OOM
+            self.drugbank_data = DrugbankStreaming(
                 user=self.drugbank_user, passwd=self.drugbank_passwd
             )
-            drugbank_drugs_detailed = self.drugbank_data.drugbank_drugs_full(
-                fields=["cas_number"]
-            )
-            self.cas_to_drugbank = {
-                drug.cas_number: drug.drugbank_id
-                for drug in drugbank_drugs_detailed
-                if drug.cas_number
-            }
+            # Build cas_to_drugbank mapping from streaming data
+            self.cas_to_drugbank = {}
+            for drug in self.drugbank_data.iter_drugs():
+                drugbank_id = drug.get('drugbank_id')
+                cas_number = drug.get('cas_number')
+                if cas_number and drugbank_id:
+                    self.cas_to_drugbank[cas_number] = drugbank_id
 
             t1 = time()
             logger.info(
@@ -416,18 +417,19 @@ class Disease:
             self.kegg_drug_disease = kegg_local.drug_to_disease()
 
             if not hasattr(self, "drugbank_data"):
-                self.drugbank_data = drugbank.DrugbankFull(
+                # Use streaming DrugBank parser to avoid OOM
+                self.drugbank_data = DrugbankStreaming(
                     user=self.drugbank_user, passwd=self.drugbank_passwd
                 )
 
-            drugbank_drugs_external_ids = (
-                self.drugbank_data.drugbank_external_ids_full()
-            )
-            self.kegg_drug_to_drugbank = {
-                v.get("KEGG Drug"): k
-                for k, v in drugbank_drugs_external_ids.items()
-                if v.get("KEGG Drug")
-            }
+            # Build kegg_drug_to_drugbank mapping from streaming data
+            self.kegg_drug_to_drugbank = {}
+            for drug in self.drugbank_data.iter_drugs():
+                drugbank_id = drug.get('drugbank_id')
+                external_ids = drug.get('external_identifiers', {})
+                kegg_drug = external_ids.get('KEGG Drug')
+                if kegg_drug and drugbank_id:
+                    self.kegg_drug_to_drugbank[kegg_drug] = drugbank_id
 
             kegg_disease_ids = kegg_local._Disease()._data.keys()
 

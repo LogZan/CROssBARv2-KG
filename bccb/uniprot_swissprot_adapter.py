@@ -75,21 +75,32 @@ class UniprotNodeField(Enum, metaclass=UniprotEnumMeta):
     ENTREZ_GENE_IDS = "xref_geneid"
     KEGG_IDS = "xref_kegg"
 
-    # not from uniprot REST
-    # we provide these by mapping ENSTs via pypath
+    # not from uniprot REST - computed via pypath
     ENSEMBL_GENE_IDS = "ensembl_gene_ids"
 
-    # not from uniprot REST
-    # we provide these by downloading the ProtT5 embeddings from uniprot
+    # embeddings (external files)
     PROTT5_EMBEDDING = "prott5_embedding"
-
-    # not from uniprot REST
-    # we provide these by getting embeddings from ESM2 650M model
     ESM2_EMBEDDING = "esm2_embedding"
-
-    # not from uniprot REST
-    # we provide these by getting embeddings from Nucletide tranformer 2 model
     NT_EMBEDDING = "nt_embedding"
+
+    # === Extended protein properties ===
+    # Basic info
+    UNIPROT_KB_ID = "uniprot_kb_id"
+    SECONDARY_ACCESSIONS = "secondary_accessions"
+    PROTEIN_EXISTENCE = "protein_existence"
+    ANNOTATION_SCORE = "annotation_score"
+    
+    # Version audit
+    FIRST_PUBLIC_DATE = "first_public_date"
+    LAST_ANNOTATION_UPDATE_DATE = "last_annotation_update_date"
+    ENTRY_VERSION = "entry_version"
+    SEQUENCE_VERSION = "sequence_version"
+    
+    # Protein description extended
+    RECOMMENDED_SHORT_NAMES = "recommended_short_names"
+    EC_NUMBERS = "ec_numbers"
+    ALTERNATIVE_NAMES_JSON = "alternative_names_json"
+    PROTEIN_FLAG = "protein_flag"
 
     @classmethod
     def _missing_(cls, value: str):
@@ -113,6 +124,19 @@ class UniprotNodeField(Enum, metaclass=UniprotEnumMeta):
             cls.SUBCELLULAR_LOCATION.value,
             cls.PROTT5_EMBEDDING.value,
             cls.ESM2_EMBEDDING.value,
+            # Extended properties
+            cls.UNIPROT_KB_ID.value,
+            cls.SECONDARY_ACCESSIONS.value,
+            cls.PROTEIN_EXISTENCE.value,
+            cls.ANNOTATION_SCORE.value,
+            cls.FIRST_PUBLIC_DATE.value,
+            cls.LAST_ANNOTATION_UPDATE_DATE.value,
+            cls.ENTRY_VERSION.value,
+            cls.SEQUENCE_VERSION.value,
+            cls.RECOMMENDED_SHORT_NAMES.value,
+            cls.EC_NUMBERS.value,
+            cls.ALTERNATIVE_NAMES_JSON.value,
+            cls.PROTEIN_FLAG.value,
         ]
 
     @classmethod
@@ -451,6 +475,72 @@ class UniprotSwissprot:
 
             if UniprotNodeField.PRIMARY_GENE_NAME.value in self.node_fields and primary_gene:
                 self.data[UniprotNodeField.PRIMARY_GENE_NAME.value][protein_id] = primary_gene
+
+        # === Extended protein properties extraction ===
+        
+        # Basic info
+        if UniprotNodeField.UNIPROT_KB_ID.value in self.node_fields:
+            self.data[UniprotNodeField.UNIPROT_KB_ID.value][protein_id] = entry.get("uniProtkbId")
+        
+        if UniprotNodeField.SECONDARY_ACCESSIONS.value in self.node_fields:
+            sec_acc = entry.get("secondaryAccessions", [])
+            if sec_acc:
+                self.data[UniprotNodeField.SECONDARY_ACCESSIONS.value][protein_id] = sec_acc
+        
+        if UniprotNodeField.PROTEIN_EXISTENCE.value in self.node_fields:
+            self.data[UniprotNodeField.PROTEIN_EXISTENCE.value][protein_id] = entry.get("proteinExistence")
+        
+        if UniprotNodeField.ANNOTATION_SCORE.value in self.node_fields:
+            self.data[UniprotNodeField.ANNOTATION_SCORE.value][protein_id] = entry.get("annotationScore")
+        
+        # Version audit info
+        entry_audit = entry.get("entryAudit", {})
+        if UniprotNodeField.FIRST_PUBLIC_DATE.value in self.node_fields:
+            self.data[UniprotNodeField.FIRST_PUBLIC_DATE.value][protein_id] = entry_audit.get("firstPublicDate")
+        
+        if UniprotNodeField.LAST_ANNOTATION_UPDATE_DATE.value in self.node_fields:
+            self.data[UniprotNodeField.LAST_ANNOTATION_UPDATE_DATE.value][protein_id] = entry_audit.get("lastAnnotationUpdateDate")
+        
+        if UniprotNodeField.ENTRY_VERSION.value in self.node_fields:
+            self.data[UniprotNodeField.ENTRY_VERSION.value][protein_id] = entry_audit.get("entryVersion")
+        
+        if UniprotNodeField.SEQUENCE_VERSION.value in self.node_fields:
+            self.data[UniprotNodeField.SEQUENCE_VERSION.value][protein_id] = entry.get("sequence", {}).get("version")
+        
+        # Extended protein description
+        if UniprotNodeField.RECOMMENDED_SHORT_NAMES.value in self.node_fields:
+            short_names = []
+            rec_name = desc.get("recommendedName", {})
+            for sn in rec_name.get("shortNames", []):
+                if sn.get("value"):
+                    short_names.append(sn.get("value"))
+            if short_names:
+                self.data[UniprotNodeField.RECOMMENDED_SHORT_NAMES.value][protein_id] = short_names
+        
+        if UniprotNodeField.EC_NUMBERS.value in self.node_fields:
+            ec_nums = []
+            rec_name = desc.get("recommendedName", {})
+            for ec in rec_name.get("ecNumbers", []):
+                if ec.get("value"):
+                    ec_nums.append(ec.get("value"))
+            # Also get from alternative names
+            for alt in desc.get("alternativeNames", []):
+                for ec in alt.get("ecNumbers", []):
+                    if ec.get("value"):
+                        ec_nums.append(ec.get("value"))
+            if ec_nums:
+                self.data[UniprotNodeField.EC_NUMBERS.value][protein_id] = ec_nums
+        
+        if UniprotNodeField.ALTERNATIVE_NAMES_JSON.value in self.node_fields:
+            alt_names = desc.get("alternativeNames", [])
+            if alt_names:
+                import json
+                self.data[UniprotNodeField.ALTERNATIVE_NAMES_JSON.value][protein_id] = json.dumps(alt_names)
+        
+        if UniprotNodeField.PROTEIN_FLAG.value in self.node_fields:
+            flag = desc.get("flag")
+            if flag:
+                self.data[UniprotNodeField.PROTEIN_FLAG.value][protein_id] = flag
 
         # Extract cross-references
         xrefs = entry.get("uniProtKBCrossReferences", [])
@@ -1175,18 +1265,46 @@ class UniprotSwissprot:
             # Determine node label from feature type
             node_label = feature_type.lower().replace(" ", "_").replace("-", "_") + "_feature"
             
-            # Extract location
+            # Extract location with modifiers
             location = feature.get("location", {})
-            start = location.get("start", {}).get("value")
-            end = location.get("end", {}).get("value")
+            start_info = location.get("start", {})
+            end_info = location.get("end", {})
+            start = start_info.get("value")
+            end = end_info.get("value")
             
-            # Edge properties
+            # Edge properties - basic info
             edge_props = {
                 "start_position": start,
                 "end_position": end,
+                "start_modifier": start_info.get("modifier"),
+                "end_modifier": end_info.get("modifier"),
                 "description": feature.get("description", ""),
                 "feature_id": feature.get("featureId"),
             }
+            
+            # Extract evidences (PubMed, PDB, PROSITE references)
+            evidences = feature.get("evidences", [])
+            if evidences:
+                evidence_codes = [e.get("evidenceCode") for e in evidences if e.get("evidenceCode")]
+                pubmed_ids = [e.get("id") for e in evidences if e.get("source") == "PubMed" and e.get("id")]
+                pdb_ids = [e.get("id") for e in evidences if e.get("source") == "PDB" and e.get("id")]
+                prosite_ids = [e.get("id") for e in evidences if e.get("source") == "PROSITE-ProRule" and e.get("id")]
+                
+                if evidence_codes:
+                    edge_props["evidence_codes"] = evidence_codes
+                if pubmed_ids:
+                    edge_props["pubmed_ids"] = pubmed_ids
+                if pdb_ids:
+                    edge_props["pdb_ids"] = pdb_ids
+                if prosite_ids:
+                    edge_props["prosite_ids"] = prosite_ids
+            
+            # Extract feature cross-references (ChEBI, etc.)
+            xrefs = feature.get("featureCrossReferences", [])
+            if xrefs:
+                chebi_ids = [x.get("id") for x in xrefs if x.get("database") == "ChEBI" and x.get("id")]
+                if chebi_ids:
+                    edge_props["chebi_ids"] = chebi_ids
             
             # Handle alternative sequence (variants, mutagenesis)
             alt_seq = feature.get("alternativeSequence", {})
