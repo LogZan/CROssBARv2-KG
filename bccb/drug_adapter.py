@@ -188,7 +188,6 @@ class DrugModel(BaseModel):
     test_mode: bool = False
     export_csv: bool = False
     output_dir: DirectoryPath | None = None
-    low_memory_mode: bool = False
 
 
 class Drug:
@@ -215,7 +214,6 @@ class Drug:
         test_mode: Optional[bool] = False,
         export_csv: Optional[bool] = False,
         output_dir: Optional[DirectoryPath | None] = None,
-        low_memory_mode: Optional[bool] = False,
     ):
         """
         Args:
@@ -230,7 +228,6 @@ class Drug:
             test_mode: if True, limits amount of output data
             export_csv: if True, export data as csv
             output_dir: Location of csv export if `export_csv` is True, if not defined it will be current directory
-            low_memory_mode: if True, uses memory-efficient processing (lazy loading, cleanup after each step)
         """
 
         model = DrugModel(
@@ -245,7 +242,6 @@ class Drug:
             test_mode=test_mode,
             export_csv=export_csv,
             output_dir=output_dir,
-            low_memory_mode=low_memory_mode,
         ).model_dump()
 
         self.user = model["drugbank_user"]
@@ -253,7 +249,6 @@ class Drug:
         self.add_prefix = model["add_prefix"]
         self.export_csv = model["export_csv"]
         self.output_dir = model["output_dir"]
-        self.low_memory_mode = model["low_memory_mode"]
 
         # Lazy load swissprots only when needed (memory optimization)
         self._swissprots = None
@@ -349,7 +344,7 @@ class Drug:
 
             self.download_drugbank_node_data()
 
-            if DrugNodeField.SELFORMER_EMBEDDING.value in self.node_fields:
+            if DrugNodeField.SELFORMER_EMBEDDING.value in self.node_fields and not self.test_mode:
                 self.retrieve_selformer_embeddings(selformer_embedding_path)
 
             if DrugEdgeType.DRUG_TARGET_INTERACTION in self.edge_types:
@@ -566,7 +561,7 @@ class Drug:
 
     def get_external_database_mappings(self):
         """
-        Create external database mappings. In low_memory_mode, loads UniChem mappings 
+        Create external database mappings. In test_mode, loads UniChem mappings 
         one at a time and cleans up after each to reduce peak memory usage.
         """
         logger.debug("Creating external database mappings")
@@ -604,9 +599,9 @@ class Drug:
         # Initialize unichem_external_fields_dict
         self.unichem_external_fields_dict = {}
         
-        # In low_memory_mode, load UniChem mappings one at a time
-        if self.low_memory_mode:
-            logger.info("Using low memory mode for UniChem mappings")
+        # In test_mode, load UniChem mappings one at a time
+        if self.test_mode:
+            logger.info("Using test mode for UniChem mappings")
             unichem_drugs_id_mappings = collections.defaultdict(dict)
             
             # Define mapping configurations
@@ -754,8 +749,8 @@ class Drug:
             unichem_mappings = unichem_drugs_id_mappings[k]
             self.drug_mappings_dict[k] = drugbank_mappings | unichem_mappings
         
-        # Clean up intermediate data in low memory mode
-        if self.low_memory_mode:
+        # Clean up intermediate data in test mode
+        if self.test_mode:
             del unichem_drugs_id_mappings
             gc.collect()
             logger.debug("Cleaned up intermediate mapping data")
@@ -1660,8 +1655,8 @@ class Drug:
             f"Chembl DTI data is processed in {round((t1-t0) / 60, 2)} mins"
         )
 
-        # Clean up ChEMBL raw data in low memory mode
-        if self.low_memory_mode:
+        # Clean up ChEMBL raw data in test mode
+        if self.test_mode:
             for attr in ['chembl_acts', 'chembl_targets', 'chembl_assays', 
                          'chembl_mechanisms', 'chembl_document_to_pubmed']:
                 if hasattr(self, attr):

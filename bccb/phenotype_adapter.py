@@ -180,7 +180,7 @@ class HPO:
             if PhenotypeEdgeType.PHENOTYPE_TO_DISEASE in self.edge_types:
                 self.hpo_phenotype_disease = hpo.hpo_diseases()
 
-            if PhenotypeNodeField.CADA_EMBEDDING.value in self.phenotype_node_fields:
+            if PhenotypeNodeField.CADA_EMBEDDING.value in self.phenotype_node_fields and not self.test_mode:
                 self.retrieve_cada_embeddings(cada_embedding_path=cada_embedding_path)
 
             t1 = time()

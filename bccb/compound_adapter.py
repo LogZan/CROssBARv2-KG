@@ -87,7 +87,6 @@ class CompoundModel(BaseModel):
     export_csv: bool = False
     output_dir: DirectoryPath | None = None
     stitch_organism: Optional[int | Literal["*"] | None] = None,
-    low_memory_mode: bool = False
 
 
 class Compound:
@@ -105,7 +104,6 @@ class Compound:
         export_csv: Optional[bool] = False,
         output_dir: Optional[DirectoryPath | None] = None,
         stitch_organism: Optional[int | Literal["*"] | None] = None,
-        low_memory_mode: Optional[bool] = False,
     ):
         """
         Initialize the Compound class.
@@ -118,7 +116,6 @@ class Compound:
             export_csv: if True, export data as csv
             output_dir: Location of csv export if `export_csv` is True, if not defined it will be current directory
             stitch_organism: NCBI taxonomy ID of the organism to download compound-target interaction data for, if "*", download for all organisms
-            low_memory_mode: if True, uses memory-efficient processing (cleanup after each step)
         """
 
         model = CompoundModel(
@@ -129,7 +126,6 @@ class Compound:
             export_csv=export_csv,
             output_dir=output_dir,
             stitch_organism=stitch_organism,
-            low_memory_mode=low_memory_mode,
         ).model_dump()
 
         self.stitch_organism = (
@@ -139,7 +135,6 @@ class Compound:
         self.add_prefix = model["add_prefix"]
         self.export_csv = model["export_csv"]
         self.output_dir = model["output_dir"]
-        self.low_memory_mode = model["low_memory_mode"]
 
         # set node fields
         self.set_node_fields(node_fields=model["node_fields"])
@@ -208,7 +203,7 @@ class Compound:
 
             self.download_chembl_data()
 
-            if CompoundNodeField.SELFORMER_EMBEDDING.value in self.node_fields:
+            if CompoundNodeField.SELFORMER_EMBEDDING.value in self.node_fields and not self.test_mode:
                 self.retrieve_selformer_embeddings(
                     selformer_embedding_path=selformer_embedding_path
                 )
@@ -477,8 +472,8 @@ class Compound:
             f"Chembl data is processed in {round((t1-t0) / 60, 2)} mins"
         )
 
-        # Clean up raw ChEMBL data in low memory mode
-        if self.low_memory_mode:
+        # Clean up raw ChEMBL data in test mode
+        if self.test_mode:
             for attr in ['chembl_acts', 'document_to_pubmed']:
                 if hasattr(self, attr):
                     delattr(self, attr)

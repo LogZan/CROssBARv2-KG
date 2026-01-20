@@ -671,7 +671,7 @@ class Disease:
                                 malacards_json_path: FilePath | None = None, 
                                 malacards_related_diseases_json_path: FilePath | None = None) -> None:
 
-        if DiseaseEdgeType.DISEASE_COMOBORDITIY in self.edge_types:
+        if DiseaseEdgeType.DISEASE_COMOBORDITIY in self.edge_types and not self.test_mode:
             t0 = time()
             if not malacards_json_path:
                 malacards_json_path = os.path.join(

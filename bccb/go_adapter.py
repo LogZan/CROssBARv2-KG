@@ -578,9 +578,14 @@ class GO:
                 logger.info(f"Using {len(self.swissprots)} SwissProt proteins")
 
                 if self.organism in ("*", None):
-                    logger.debug(
-                        "Started downloading Gene Ontology annotation data for all organisms"
-                    )
+                    if not cache:
+                        logger.debug(
+                            "Started downloading Gene Ontology annotation data for all organisms"
+                        )
+                    else:
+                        logger.debug(
+                            "Using cached Gene Ontology annotation data for all organisms"
+                        )
 
                     if all_annotations_output_path:
                         full_path = all_annotations_output_path
@@ -696,7 +701,10 @@ class GO:
                     logger.info("Test mode: skipping Interpro2go data to save memory")
                     self.interpro2go = {}
                 else:
-                    logger.debug("Started downloading Interpro2go data")
+                    if not cache:
+                        logger.debug("Started downloading Interpro2go data")
+                    else:
+                        logger.debug("Using cached Interpro2go data")
                     t0 = time()
 
                     self.interpro2go = interpro.interpro_xrefs(

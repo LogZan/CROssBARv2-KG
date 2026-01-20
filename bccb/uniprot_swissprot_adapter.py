@@ -359,17 +359,17 @@ class UniprotSwissprot:
         self._load_json_data()
 
         # Load embeddings if requested
-        if UniprotNodeField.PROTT5_EMBEDDING.value in self.node_fields:
+        if UniprotNodeField.PROTT5_EMBEDDING.value in self.node_fields and not self.test_mode:
             self.data[UniprotNodeField.PROTT5_EMBEDDING.value] = {}
             self.download_prott5_embeddings(
                 prott5_embedding_output_path=prott5_embedding_output_path
             )
 
-        if UniprotNodeField.ESM2_EMBEDDING.value in self.node_fields:
+        if UniprotNodeField.ESM2_EMBEDDING.value in self.node_fields and not self.test_mode:
             self.data[UniprotNodeField.ESM2_EMBEDDING.value] = {}
             self.retrieve_esm2_embeddings(esm2_embedding_path)
 
-        if UniprotNodeField.NT_EMBEDDING.value in self.node_fields:
+        if UniprotNodeField.NT_EMBEDDING.value in self.node_fields and not self.test_mode:
             self.data[UniprotNodeField.NT_EMBEDDING.value] = {}
             self.retrieve_nucleotide_transformer_embeddings(
                 nucleotide_transformer_embedding_path

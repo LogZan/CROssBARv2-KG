@@ -118,6 +118,10 @@ from biocypher import BioCypher
 # dirs
 timestamp = datetime.now(TZ).strftime("%Y%m%d%H%M%S")
 output_dir_path = str(project_root / "biocypher-out")
+embeddings_dir_path = '/GenSIvePFS/users/data/embeddings'
+malacards_dir_path = '/GenSIvePFS/users/data/malacards'
+uniprot_json_path = '/GenSIvePFS/users/data/UniProt/UniProtKB_SwissProt/uniprotkb_reviewed_true_2025_11_04.json'
+
 
 # Helper for consistent logging
 def log_adapter_boundary(adapter_name: str, phase: str):
@@ -150,10 +154,6 @@ TEST_MODE = True
 # Set to True on first run to add new types, then set to False for subsequent runs
 UPDATE_SCHEMA_DYNAMICALLY = False
 # UPDATE_SCHEMA_DYNAMICALLY = True
-
-# Flag for low memory mode
-# LOW_MEMORY_MODE = False
-LOW_MEMORY_MODE = True
 
 # Organism filter for adapters
 # Use "*" for all organisms, or specify NCBI taxonomy ID (e.g., 9606 for human)
@@ -265,10 +265,9 @@ uniprot_node_fields = [
     UniprotNodeField.EC_NUMBERS,
     UniprotNodeField.ALTERNATIVE_NAMES_JSON,
     UniprotNodeField.PROTEIN_FLAG,
-    # Embeddings (disabled: slow to load)
-    # UniprotNodeField.PROTT5_EMBEDDING,
-    # UniprotNodeField.ESM2_EMBEDDING,
-    # UniprotNodeField.NT_EMBEDDING,
+    UniprotNodeField.PROTT5_EMBEDDING,
+    UniprotNodeField.ESM2_EMBEDDING,
+    UniprotNodeField.NT_EMBEDDING,
 ]
 
 uniprot_edge_types = [
@@ -289,7 +288,7 @@ uniprot_id_type = [
 log_adapter_boundary("UniProt SwissProt", "start")
 try:
     uniprot_adapter = UniprotSwissprot(
-            json_path="/GenSIvePFS/users/data/UniProt/UniProtKB_SwissProt/uniprotkb_reviewed_true_2025_11_04.json",
+            json_path=uniprot_json_path,
             organism=ORGANISM,
             node_types=uniprot_node_types,
             node_fields=uniprot_node_fields,
@@ -298,7 +297,10 @@ try:
             test_mode=TEST_MODE,
         )
 
-    uniprot_adapter.download_uniprot_data(cache=CACHE, retries=6)
+    uniprot_adapter.download_uniprot_data(cache=CACHE, 
+            prott5_embedding_output_path=embeddings_dir_path,
+            esm2_embedding_path=embeddings_dir_path,
+            nucleotide_transformer_embedding_path=embeddings_dir_path)
 
     # Optionally update schema with dynamically discovered types
     if UPDATE_SCHEMA_DYNAMICALLY:
@@ -450,18 +452,14 @@ finally:
 # drug - with memory optimization
 log_adapter_boundary("Drug", "start")
 try:
-    # Exclude SELFORMER_EMBEDDING (requires external file path)
-    drug_node_fields = [f for f in DrugNodeField if f != DrugNodeField.SELFORMER_EMBEDDING]
     drug_adapter = Drug(
         drugbank_user=drugbank_user,
         drugbank_passwd=drugbank_passwd,
-        node_fields=drug_node_fields,
         export_csv=export_as_csv,
         output_dir=output_dir_path,
         test_mode=TEST_MODE,
-        low_memory_mode=LOW_MEMORY_MODE
     )
-    drug_adapter.download_drug_data(cache=CACHE)
+    drug_adapter.download_drug_data(cache=CACHE, selformer_embedding_path=embeddings_dir_path)
     drug_adapter.process_drug_data()
     bc.write_nodes(drug_adapter.get_drug_nodes())
     bc.write_edges(drug_adapter.get_edges())
@@ -484,9 +482,8 @@ try:
         export_csv=export_as_csv,
         output_dir=output_dir_path,
         test_mode=TEST_MODE,
-        low_memory_mode=True  # Enable memory optimization
     )
-    compound_adapter.download_compound_data(cache=CACHE)
+    compound_adapter.download_compound_data(cache=CACHE, selformer_embedding_path=embeddings_dir_path)
     compound_adapter.process_compound_data()
     bc.write_nodes(compound_adapter.get_compound_nodes())
     bc.write_edges(compound_adapter.get_cti_edges())
@@ -530,7 +527,11 @@ try:
         output_dir=output_dir_path,
         test_mode=TEST_MODE
     )
-    disease_adapter.download_disease_data(cache=CACHE)
+    disease_adapter.download_disease_data(cache=CACHE,
+        doc2vec_embedding_path=embeddings_dir_path,
+        malacards_dir_path=malacards_dir_path,
+        malacards_related_diseases_json_path=malacards_dir_path
+        )
     bc.write_nodes(disease_adapter.get_nodes())
     bc.write_edges(disease_adapter.get_edges())
 except Exception as e:
@@ -549,7 +550,7 @@ try:
         output_dir=output_dir_path,
         test_mode=TEST_MODE
     )
-    phenotype_adapter.download_hpo_data(cache=CACHE)
+    phenotype_adapter.download_hpo_data(cache=CACHE, cache_dir_path=embeddings_dir_path)
     bc.write_nodes(phenotype_adapter.get_nodes())
     bc.write_edges(phenotype_adapter.get_edges())
 except Exception as e:
@@ -564,7 +565,7 @@ finally:
 log_adapter_boundary("Pathway", "start")
 try:
     # Limit to human only in test mode to avoid slow KEGG download for all organisms
-    kegg_organism = ["hsa"] if TEST_MODE else None
+    kegg_organism = ORGANISM if not TEST_MODE else ["hsa"]
     pathway_adapter = Pathway(
         drugbank_user=drugbank_user,
         drugbank_passwd=drugbank_passwd,
@@ -573,7 +574,7 @@ try:
         test_mode=TEST_MODE,
         kegg_organism=kegg_organism,
     )
-    pathway_adapter.download_pathway_data(cache=CACHE)
+    pathway_adapter.download_pathway_data(cache=CACHE, biokeen_embedding_path=embeddings_dir_path)
     bc.write_nodes(pathway_adapter.get_nodes())
     bc.write_edges(pathway_adapter.get_edges())
 except Exception as e:
@@ -616,9 +617,10 @@ try:
     ec_adapter = EC(
         export_csv=export_as_csv,
         output_dir=output_dir_path,
-        test_mode=TEST_MODE
+        test_mode=TEST_MODE,
+        organism=ORGANISM,
     )
-    ec_adapter.download_ec_data(cache=CACHE)
+    ec_adapter.download_ec_data(cache=CACHE, rxnfp_embedding_path=embeddings_dir_path)
     bc.write_nodes(ec_adapter.get_nodes())
     bc.write_edges(ec_adapter.get_edges())
 except Exception as e:
@@ -637,7 +639,8 @@ try:
     tfgene_adapter = TFGene(
         export_csv=export_as_csv,
         output_dir=output_dir_path,
-        test_mode=TEST_MODE
+        organism=ORGANISM,
+        test_mode=TEST_MODE,
     )
     tfgene_adapter.download_tfgen_data(cache=CACHE)
     bc.write_edges(tfgene_adapter.get_edges())
