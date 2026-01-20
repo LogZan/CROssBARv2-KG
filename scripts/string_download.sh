@@ -1,1 +1,0 @@
-cd /GenSIvePFS/users/clzeng/workspace/CROssBARv2-KG && python scripts/download_string_data.py --workers 12 2>&1 | tee string_download.log
