@@ -259,9 +259,11 @@ class Compound:
         t0 = time()
         logger.debug("Started downloading Chembl data (streaming mode)")
 
-        # Limit ChemBL pages to avoid OOM
-        max_pages = 10 if self.early_stopping else 100
-        logger.info(f"Using max_pages={max_pages} for ChemBL data")
+        # Limit ChemBL pages to avoid OOM in test mode
+        # Test mode: 1 page (~1000 records)
+        # Normal mode: No limit (downloads all data)
+        max_pages = 1 if self.test_mode else None
+        logger.info(f"Using max_pages={max_pages} for ChemBL data ({'test mode' if self.test_mode else 'full download'})")
 
         # Step 1: Load smaller lookup tables first
         logger.debug("Loading ChemBL targets...")
@@ -275,7 +277,14 @@ class Compound:
         organism_for_swissprot = self.stitch_organism if self.stitch_organism != "*" else "*"
         logger.info(f"Loading SwissProt proteins for organism: {organism_for_swissprot}")
         swissprots = set(uniprot._all_uniprots(organism=organism_for_swissprot, swissprot=True))
-        logger.info(f"Loaded {len(swissprots)} SwissProt proteins")
+
+        # Limit proteins in test mode to speed up processing
+        if self.test_mode:
+            swissprots = set(list(swissprots)[:100])
+            logger.info(f"Test mode: Limited to {len(swissprots)} SwissProt proteins")
+        else:
+            logger.info(f"Loaded {len(swissprots)} SwissProt proteins")
+
         chembl_targets = [
             i for i in chembl_targets if i.accession in swissprots
         ]

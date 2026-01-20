@@ -727,7 +727,7 @@ class GO:
             return
             
         with h5py.File(anc2vec_embedding_path, "r") as f:
-            for go_term, embedding in tqdm(f.items(), total=len(f.keys())):
+            for go_term, embedding in tqdm(f.items(), total=len(f.keys()), desc="Retrieving Anc2vec embeddings"):
                 self.go_term_to_anc2vec_embedding[go_term] = np.array(embedding).astype(np.float16)
 
     def set_node_and_edge_types(
@@ -936,7 +936,7 @@ class GO:
 
         counter = 0
         for go_term in tqdm(
-            self.go_ontology.name.keys()
+            self.go_ontology.name.keys(), desc="Preparing GO nodes"
         ):  # keys in self.go_ontology.name is current go ids in the ontology
 
             if label := self.aspect_to_node_label_dict.get(
@@ -996,6 +996,7 @@ class GO:
                 for index, row in tqdm(
                     self.go_annots_df.iterrows(),
                     total=self.go_annots_df.shape[0],
+                    desc="Processing Protein-GO edges",
                 ):
                     if (
                         row["go_id"] in self.go_ontology.aspect.keys()
@@ -1057,7 +1058,7 @@ class GO:
                         break
             else:
                 counter = 0
-                for k, v in tqdm(self.go_annots.items()):
+                for k, v in tqdm(self.go_annots.items(), desc="Processing Protein-GO edges"):
                     if k in self.swissprots:
                         protein_id = self.add_prefix_to_id("uniprot", k)
                         for annotation in list(v):
@@ -1146,7 +1147,7 @@ class GO:
             self.go_to_go_edges = []
 
             counter = 0
-            for k, v in tqdm(self.go_ontology.ancestors.items()):
+            for k, v in tqdm(self.go_ontology.ancestors.items(), desc="Processing GO-GO edges"):
                 source_go_id = self.add_prefix_to_id("go", k)
 
                 for ancestor in list(v):
@@ -1215,7 +1216,7 @@ class GO:
             self.domain_to_go_edges = []
 
             counter = 0
-            for k, v in tqdm(self.interpro2go.items()):
+            for k, v in tqdm(self.interpro2go.items(), desc="Processing Domain-GO edges"):
                 if v:
                     for go_term in v:
                         if go_term in self.go_ontology.aspect.keys():

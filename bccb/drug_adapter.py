@@ -342,25 +342,25 @@ class Drug:
 
             t0 = time()
 
-            self.download_drugbank_node_data()
+            self.download_drugbank_node_data(cache=cache)
 
             if DrugNodeField.SELFORMER_EMBEDDING.value in self.node_fields:
                 self.retrieve_selformer_embeddings(selformer_embedding_path)
 
             if DrugEdgeType.DRUG_TARGET_INTERACTION in self.edge_types:
-                self.download_chembl_dti_data()
-                self.download_drugbank_dti_data()
+                self.download_chembl_dti_data(cache=cache)
+                self.download_drugbank_dti_data(cache=cache)
                 # Pharos uses streaming - download happens during process_pharos_dti_data()
-                self.download_dgidb_dti_data()
-                self.download_kegg_dti_data()
-                self.download_stitch_dti_data()
+                self.download_dgidb_dti_data(cache=cache)
+                self.download_kegg_dti_data(cache=cache)
+                self.download_stitch_dti_data(cache=cache)
 
             if DrugEdgeType.DRUG_DRUG_INTERACTION in self.edge_types:
-                self.download_kegg_ddi_data()
-                self.download_ddinter_ddi_data()
+                self.download_kegg_ddi_data(cache=cache)
+                self.download_ddinter_ddi_data(cache=cache)
 
             if DrugEdgeType.DRUG_GENE_INTERACTION in self.edge_types:
-                self.download_ctd_data()
+                self.download_ctd_data(cache=cache)
 
             t1 = time()
             action = "retrieved" if cache else "downloaded"
@@ -397,7 +397,7 @@ class Drug:
             f"All data is processed in {round((t1-t0) / 60, 2)} mins".upper()
         )
 
-    def download_drugbank_node_data(self):
+    def download_drugbank_node_data(self, cache: bool = False):
 
         # define  fields belong to drugbank or unichem
         fields_list = DrugNodeField.get_drugbank_core_fields()
@@ -532,7 +532,7 @@ class Drug:
             for drug_id, embedding in tqdm(f.items(), total=len(f.keys())):
                 self.drugbank_id_to_selformer_embedding[drug_id] = np.array(embedding).astype(np.float16)
 
-    def download_drugbank_dti_data(self):
+    def download_drugbank_dti_data(self, cache: bool = False):
 
         # DTI edge data
         logger.debug("Downloading Drugbank DTI data")
@@ -866,7 +866,7 @@ class Drug:
 
         return drugbank_dti_df
 
-    def download_dgidb_dti_data(self):
+    def download_dgidb_dti_data(self, cache: bool = False):
         """
         Wrapper function to download DGIdb DTI data using pypath
 
@@ -1013,7 +1013,7 @@ class Drug:
 
         return dgidb_dti_df
 
-    def download_kegg_dti_data(self, organism: str | list = "hsa"):
+    def download_kegg_dti_data(self, organism: str | list = "hsa", cache: bool = False):
         """
         Wrapper function to download KEGG DTI and DDI data using pypath
 
@@ -1107,7 +1107,7 @@ class Drug:
 
         return kegg_dti_df
 
-    def download_kegg_ddi_data(self, from_csv=False):
+    def download_kegg_ddi_data(self, from_csv=False, cache: bool = False):
 
         # DDI
         logger.debug("Downloading KEGG DDI data, this may take around 12 hours")
@@ -1216,7 +1216,7 @@ class Drug:
 
         return kegg_ddi_df
 
-    def download_ddinter_ddi_data(self):
+    def download_ddinter_ddi_data(self, cache: bool = False):
 
         logger.debug("Downloading DDInter DDI data")
         t0 = time()
@@ -1477,16 +1477,16 @@ class Drug:
 
         return pharos_dti_df
 
-    def download_chembl_dti_data(self) -> pd.DataFrame:
+    def download_chembl_dti_data(self, cache: bool = False) -> pd.DataFrame:
 
         logger.debug("Downloading Chembl DTI data")
         t0 = time()
 
-        # Limit ChemBL pages to avoid OOM (each page has ~1000 records)
-        # Full ChemBL has ~19M activities = ~19000 pages
-        # For test mode use 10 pages, for normal mode use 100 pages (still ~100K activities)
-        max_pages = 10 if self.early_stopping else 100
-        logger.info(f"Using max_pages={max_pages} for ChemBL data to limit memory usage")
+        # Limit ChemBL pages to avoid OOM in test mode (each page has ~1000 records)
+        # Test mode: 1 page (~1000 activities)
+        # Normal mode: No limit (downloads all ~19M activities)
+        max_pages = 1 if self.test_mode else None
+        logger.info(f"Using max_pages={max_pages} for ChemBL data ({'test mode' if self.test_mode else 'full download'})")
 
         try:
             self.chembl_acts = list(chembl_compat.chembl_activities(
@@ -1666,7 +1666,7 @@ class Drug:
 
         return chembl_dti_df
 
-    def download_ctd_data(self):
+    def download_ctd_data(self, cache: bool = False):
 
         logger.debug("Downloading CTD DGI data")
         t0 = time()
@@ -1826,6 +1826,7 @@ class Drug:
             ]
         ) = "high_confidence",
         physical_interaction_score: bool = False,  # currently this arg doesnt work for organisms other than human. can be fixed if necessary.
+        cache: bool = False,
     ):
         """
         Wrapper function to download STITCH DTI data using pypath
