@@ -368,8 +368,9 @@ class Drug:
                 self.download_ctd_data()
 
             t1 = time()
+            action = "retrieved" if cache else "downloaded"
             logger.info(
-                f"All data is downloaded in {round((t1-t0) / 60, 2)} mins".upper()
+                f"All data is {action} in {round((t1-t0) / 60, 2)} mins".upper()
             )
 
     def process_drug_data(self):
@@ -459,8 +460,9 @@ class Drug:
         self.get_external_database_mappings()
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"Drugbank drug node data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"Drugbank drug node data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
     def process_drugbank_node_data(self) -> dict:
@@ -557,8 +559,9 @@ class Drug:
         )
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"Drugbank DTI data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"Drugbank DTI data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
     def get_external_database_mappings(self):
@@ -907,8 +910,9 @@ class Drug:
             self.get_external_database_mappings()
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"Dgidb DTI data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"Dgidb DTI data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
     def process_dgidb_dti_data(self) -> pd.DataFrame:
@@ -1083,8 +1087,9 @@ class Drug:
         self.kegg_dti = list(self.kegg_dti)
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"KEGG DTI data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"KEGG DTI data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
     def process_kegg_dti_data(self) -> pd.DataFrame:
@@ -1123,8 +1128,9 @@ class Drug:
             self.kegg_ddi_data = kegg_local.drug_to_drug()
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"KEGG DDI data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"KEGG DDI data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
     def process_kegg_ddi_data(self, from_csv=False) -> pd.DataFrame:
@@ -1226,7 +1232,8 @@ class Drug:
             self.ddinter_to_drugbank = {}
             self.ddinter_interactions = []
             t1 = time()
-            logger.info(f"DDInter DDI data is downloaded in {round((t1-t0) / 60, 2)} mins")
+            action = "retrieved" if cache else "downloaded"
+            logger.info(f"DDInter DDI data is {action} in {round((t1-t0) / 60, 2)} mins")
             return
 
         try:
@@ -1245,8 +1252,9 @@ class Drug:
             self.ddinter_interactions = []
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"DDInter DDI data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"DDInter DDI data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
     def process_ddinter_ddi_data(self) -> pd.DataFrame:
@@ -1522,8 +1530,9 @@ class Drug:
             self.get_external_database_mappings()
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"Chembl DTI data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"Chembl DTI data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
     def process_chembl_dti_data(self) -> pd.DataFrame:
@@ -1679,8 +1688,9 @@ class Drug:
                 self.ctd_dgi = []
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"CTD DGI data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"CTD DGI data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
     def process_ctd_data(self) -> pd.DataFrame:
@@ -1904,8 +1914,9 @@ class Drug:
                 )
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"STITCH data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"STITCH data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
     def process_stitch_dti_data(self) -> pd.DataFrame:

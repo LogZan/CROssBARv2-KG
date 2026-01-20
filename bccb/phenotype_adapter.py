@@ -184,8 +184,9 @@ class HPO:
                 self.retrieve_cada_embeddings(cada_embedding_path=cada_embedding_path)
 
             t1 = time()
+            action = "retrieved" if cache else "downloaded"
             logger.info(
-                f"HPO data is downloaded in {round((t1-t0) / 60, 2)} mins"
+                f"HPO data is {action} in {round((t1-t0) / 60, 2)} mins"
             )
     @validate_call
     def retrieve_cada_embeddings(self, cada_embedding_path: FilePath | None = None) -> None:

@@ -545,8 +545,9 @@ class GO:
             self.go_ontology = go_util.GeneOntology()
 
             t1 = time()
+            action = "retrieved" if cache else "downloaded"
             logger.info(
-                f"Gene Ontology entry data is downloaded in {round((t1-t0) / 60, 2)} mins"
+                f"Gene Ontology entry data is {action} in {round((t1-t0) / 60, 2)} mins"
             )
             
             if GONodeField.ANC2VEC_EMBBEDDING.value in self.go_node_fields:
@@ -679,9 +680,9 @@ class GO:
                         )
 
                 t1 = time()
-
+                action = "retrieved" if cache else "downloaded"
                 logger.info(
-                    f"Gene Ontology annotation data is downloaded in {round((t1-t0) / 60, 2)} mins"
+                    f"Gene Ontology annotation data is {action} in {round((t1-t0) / 60, 2)} mins"
                 )
 
             if any(
@@ -702,8 +703,9 @@ class GO:
                         db_type="go"
                     )  # returns dict of interpro ids as keys and go term annotations as values
                     t1 = time()
+                    action = "retrieved" if cache else "downloaded"
                     logger.info(
-                        f"Interpro2go data is downloaded in {round((t1-t0) / 60, 2)} mins"
+                        f"Interpro2go data is {action} in {round((t1-t0) / 60, 2)} mins"
                     )
                     
     def retrieve_anc2vec_embedding(self, anc2vec_embedding_path: FilePath | None = None):

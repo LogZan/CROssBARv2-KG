@@ -116,8 +116,6 @@ from bccb.tfgen_adapter import (
 from biocypher import BioCypher
 
 # dirs
-# Use a fixed latest directory for reproducible paths, but backup old runs if needed
-# For now, we use a single latest directory as requested
 timestamp = datetime.now(TZ).strftime("%Y%m%d%H%M%S")
 output_dir_path = str(project_root / "biocypher-out")
 
@@ -159,8 +157,8 @@ LOW_MEMORY_MODE = True
 
 # Organism filter for adapters
 # Use "*" for all organisms, or specify NCBI taxonomy ID (e.g., 9606 for human)
-ORGANISM = "*"
-# ORGANISM = 9606  # Human only
+# ORGANISM = "*"
+ORGANISM = 9606  # Human only
 
 
 def update_schema_with_dynamic_types(schema_path: str, annotation_types: set, feature_types: set):

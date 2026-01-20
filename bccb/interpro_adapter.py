@@ -204,12 +204,12 @@ class InterPro:
             if not cache:
                 stack.enter_context(curl.cache_off())
 
-            self.download_domain_node_data(dom2vec_embedding_path=dom2vec_embedding_path)
-            self.download_domain_edge_data()
+            self.download_domain_node_data(dom2vec_embedding_path=dom2vec_embedding_path, cache=cache)
+            self.download_domain_edge_data(cache=cache)
 
     @validate_call
     def download_domain_node_data(self, dom2vec_embedding_path: FilePath | None = None, 
-                                  use_streaming: bool = True) -> None:
+                                  use_streaming: bool = True, cache: bool = False) -> None:
         """
         Downloads domain node data from Interpro
         
@@ -259,11 +259,12 @@ class InterPro:
             self.retrieve_dom2vec_embeddings(dom2vec_embedding_path=dom2vec_embedding_path)
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"InterPro domain data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"InterPro domain data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
-    def download_domain_edge_data(self) -> None:
+    def download_domain_edge_data(self, cache: bool = False) -> None:
         """
         Downloads Uniprot annotation data from Interpro.
         
@@ -299,8 +300,9 @@ class InterPro:
             self.interpro_annotations = {}
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"InterPro annotation data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"InterPro annotation data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
     def retrieve_dom2vec_embeddings(self, 

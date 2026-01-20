@@ -215,8 +215,9 @@ class Compound:
             self.download_stitch_cti_data()
 
             t1 = time()
+            action = "retrieved" if cache else "downloaded"
             logger.info(
-                f"All data is downloaded in {round((t1-t0) / 60, 2)} mins".upper()
+                f"All data is {action} in {round((t1-t0) / 60, 2)} mins".upper()
             )
 
     def retrieve_selformer_embeddings(self, 
@@ -386,8 +387,9 @@ class Compound:
         gc.collect()
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"Chembl data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"Chembl data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
     def process_chembl_cti_data(self) -> pd.DataFrame:
@@ -583,8 +585,9 @@ class Compound:
                 )
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"STITCH data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"STITCH data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
     def process_stitch_cti_data(self) -> pd.DataFrame:

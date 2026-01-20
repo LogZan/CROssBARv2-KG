@@ -178,7 +178,8 @@ class PPI:
         """
         # Set adapter-specific cache directory
         cache_config.set_adapter_cache('ppi')
-        
+
+
         with ExitStack() as stack:
             stack.enter_context(settings.settings.context(retries=retries))
 
@@ -187,27 +188,32 @@ class PPI:
             if not cache:
                 stack.enter_context(curl.cache_off())
 
-            self.download_intact_data()
-            self.download_biogrid_data()
-            self.download_string_data()
+            self.download_intact_data(cache=cache)
+            self.download_biogrid_data(cache=cache)
+            self.download_string_data(cache=cache)
 
     def process_ppi_data(self) -> None:
         self.intact_process()
         self.biogrid_process()
         self.string_process()
         
-    def download_intact_data(self) -> None:
+    def download_intact_data(self, cache: bool = False) -> None:
         """
         Wrapper function to download IntAct data using pypath; used to access
         settings.
 
         To do: Make arguments of intact.intact_interactions selectable for user.
         """
+        # Set adapter-specific cache directory
+        cache_config.set_adapter_cache('intact')
 
-        logger.debug("Started downloading IntAct data")
-        logger.info(
-            f"This is the link of IntAct data we downloaded:{urls.urls['intact']['mitab']}. Please check if it is up to date"
-        )
+        if not cache:
+            logger.debug("Started downloading IntAct data")
+            logger.info(
+                f"This is the link of IntAct data we downloaded:{urls.urls['intact']['mitab']}. Please check if it is up to date"
+            )
+        else:
+            logger.debug("Using cached IntAct data")
         t0 = time()
 
         self.intact_ints = intact.intact_interactions(
@@ -218,8 +224,9 @@ class PPI:
         )
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"IntAct data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"IntAct data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
         if self.test_mode:
@@ -383,18 +390,21 @@ class PPI:
             "properties_dict"
         ] = self.intact_field_new_names
 
-    def download_biogrid_data(self) -> None:
+    def download_biogrid_data(self, cache: bool = False) -> None:
         """
         Wrapper function to download BioGRID data using pypath; used to access
         settings.
 
         To do: Make arguments of biogrid.biogrid_all_interactions selectable for user.
         """
-
-        logger.info(
-            f"This is the link of BioGRID data we downloaded:{urls.urls['biogrid']['all']}. Please check if it is up to date"
-        )
-        logger.debug("Started downloading BioGRID data")
+        # Set adapter-specific cache directory
+        cache_config.set_adapter_cache('biogrid')
+        
+        if not cache:
+            logger.info(
+                f"This is the link of BioGRID data we downloaded:{urls.urls['biogrid']['all']}. Please check if it is up to date"
+            )
+            logger.debug("Started downloading BioGRID data")
         t0 = time()
 
         # download biogrid data
@@ -406,7 +416,7 @@ class PPI:
         try:
             self.uniprot_to_gene = uniprot.uniprot_data("gene_names", "*", True)
             self.uniprot_to_tax = uniprot.uniprot_data("organism_id", "*", True)
-            
+
             # Fix: Handle list return type from pypath
             if isinstance(self.uniprot_to_gene, list):
                 if not self.uniprot_to_gene:
@@ -417,7 +427,7 @@ class PPI:
                     # Based on logs, it returns empty list [] when it fails or finds nothing.
                     logger.warning(f"uniprot_to_gene returned list: {self.uniprot_to_gene[:5] if self.uniprot_to_gene else '[]'}. Attempting to use empty mapping.")
                     self.uniprot_to_gene = {}
-            
+
             if isinstance(self.uniprot_to_tax, list):
                 if not self.uniprot_to_tax:
                     self.uniprot_to_tax = {}
@@ -438,8 +448,9 @@ class PPI:
             self.uniprot_to_tax = {}
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"BioGRID data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"BioGRID data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
         if self.test_mode:
@@ -636,14 +647,16 @@ class PPI:
             "properties_dict"
         ] = self.biogrid_field_new_names
 
-    def download_string_data(self) -> None:
+    def download_string_data(self, cache: bool = False) -> None:
         """
         Wrapper function to download STRING data using pypath; used to access
         settings.
 
         To do: Make arguments of string.string_links_interactions selectable for user.
         """
-
+        # Set adapter-specific cache directory
+        cache_config.set_adapter_cache('string')
+        
         t0 = time()
 
         if self.organism is None:
@@ -653,38 +666,28 @@ class PPI:
             self.tax_ids = [self.organism]
 
         # map string ids to swissprot ids
-        try:
-            uniprot_to_string = uniprot.uniprot_data("xref_string", "*", True)
-            
-            # Fix: Handle list return type from pypath
-            if isinstance(uniprot_to_string, list):
-                 if not uniprot_to_string:
-                     uniprot_to_string = {}
-                 else:
-                     logger.warning(f"uniprot_to_string returned list: {uniprot_to_string[:5] if uniprot_to_string else '[]'}. Attempting to use empty mapping.")
-                     uniprot_to_string = {}
+        # Use self.organism if set, otherwise None for all organisms
+        organism_param = self.organism if self.organism is not None else None
 
-            # Check if result is a dict, if not (e.g., empty list), use empty dict
-            if not isinstance(uniprot_to_string, dict):
-                logger.warning(f"uniprot_to_string returned {type(uniprot_to_string)} instead of dict. Using empty mapping.")
-                uniprot_to_string = {}
-        except (ValueError, AttributeError, TypeError) as e:
-            logger.warning(f"Failed to download uniprot-string mapping: {e}. Using empty mapping.")
-            uniprot_to_string = {}
+        uniprot_to_string = uniprot.uniprot_data(
+                fields="xref_string",
+                organism=organism_param,
+                reviewed=True
+            )
 
         self.string_to_uniprot = collections.defaultdict(list)
         for k, v in uniprot_to_string.items():
-            if v:  # Check if v is not None or empty
-                for string_id in list(filter(None, str(v).split(";"))):
-                    if "." in string_id:
-                        self.string_to_uniprot[string_id.split(".")[1]].append(k)
+            for string_id in list(filter(None, str(v).split(";"))):
+                if "." in string_id:
+                    self.string_to_uniprot[string_id.split(".")[1]].append(k)
 
         self.string_ints = []
 
-        logger.debug("Started downloading STRING data")
-        logger.info(
-            f"This is the link of STRING data we downloaded:{urls.urls['string']['links']}. Please check if it is up to date"
-        )
+        if not cache:
+            logger.debug("Started downloading STRING data")
+            logger.info(
+                f"This is the link of STRING data we downloaded:{urls.urls['string']['links']}. Please check if it is up to date"
+            )
 
         # this tax id give an error
         tax_ids_to_be_skipped = [
@@ -694,22 +697,11 @@ class PPI:
 
         # Filter out problematic tax IDs
         valid_tax_ids = [tax for tax in self.tax_ids if tax not in tax_ids_to_be_skipped]
-        
-        # In test mode, only download a subset
-        if self.test_mode:
-            valid_tax_ids = valid_tax_ids[:10]  # Only process first 10 species in test mode
-            logger.info(f"Test mode: limiting to first 10 species out of {len(self.tax_ids)} total")
 
-        # Parallel download function
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        from threading import Lock
-        
-        results_lock = Lock()
-        self.string_ints = []
-        
-        def download_single_species(tax):
-            """Download STRING data for a single species"""
-            try:
+        # it may take around 100 hours to download whole data
+        for tax in tqdm(self.tax_ids, desc="Retrieving STRING data"):
+            if tax not in tax_ids_to_be_skipped:
+                # remove proteins that does not have swissprot ids
                 organism_string_ints = [
                     i
                     for i in string.string_links_interactions(
@@ -719,35 +711,21 @@ class PPI:
                     if i.protein_a in self.string_to_uniprot
                     and i.protein_b in self.string_to_uniprot
                 ]
-                
-                return (tax, organism_string_ints)
-            except Exception as e:
-                logger.warning(f"Failed to download STRING data for tax_id {tax}: {e}")
-                return (tax, [])
-        
-        # Use parallel downloads with up to 8 workers
-        max_workers = min(8, len(valid_tax_ids))
-        logger.info(f"Downloading STRING data for {len(valid_tax_ids)} species using {max_workers} parallel workers...")
-        
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all download tasks
-            future_to_tax = {executor.submit(download_single_species, tax): tax for tax in valid_tax_ids}
-            
-            # Process completed downloads with progress bar
-            for future in tqdm(as_completed(future_to_tax), total=len(valid_tax_ids), desc="Downloading STRING"):
-                tax, organism_string_ints = future.result()
-                
+
+                logger.debug(
+                    f"STRING data with taxonomy id {str(tax)}, filtered interaction count for this tax id is {len(organism_string_ints)}"
+                )
+
                 if organism_string_ints:
-                    with results_lock:
-                        self.string_ints.extend(organism_string_ints)
-                    
+                    self.string_ints.extend(organism_string_ints)
                     logger.debug(
-                        f"Downloaded STRING data for tax_id {tax}: {len(organism_string_ints)} interactions (total: {len(self.string_ints)})"
+                        f"Total interaction count is {len(self.string_ints)}"
                     )
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"STRING data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"STRING data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
         if self.test_mode:

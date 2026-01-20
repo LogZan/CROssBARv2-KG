@@ -143,8 +143,9 @@ class EC:
                 self.retrieve_rxfnp_embeddings(rxnfp_embedding_path)
 
             t1 = time()
+            action = "retrieved" if cache else "downloaded"
             logger.info(
-                f"Expasy EC number data is downloaded in {round((t1-t0) / 60, 2)} mins"
+                f"Expasy EC number data is {action} in {round((t1-t0) / 60, 2)} mins"
             )
     
     def retrieve_rxfnp_embeddings(self, 
