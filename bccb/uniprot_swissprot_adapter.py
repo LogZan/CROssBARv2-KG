@@ -89,18 +89,33 @@ class UniprotNodeField(Enum, metaclass=UniprotEnumMeta):
     SECONDARY_ACCESSIONS = "secondary_accessions"
     PROTEIN_EXISTENCE = "protein_existence"
     ANNOTATION_SCORE = "annotation_score"
-    
+
     # Version audit
     FIRST_PUBLIC_DATE = "first_public_date"
     LAST_ANNOTATION_UPDATE_DATE = "last_annotation_update_date"
+    LAST_SEQUENCE_UPDATE_DATE = "last_sequence_update_date"
     ENTRY_VERSION = "entry_version"
     SEQUENCE_VERSION = "sequence_version"
-    
+
     # Protein description extended
     RECOMMENDED_SHORT_NAMES = "recommended_short_names"
     EC_NUMBERS = "ec_numbers"
     ALTERNATIVE_NAMES_JSON = "alternative_names_json"
     PROTEIN_FLAG = "protein_flag"
+
+    # Sequence checksums
+    SEQUENCE_CRC64 = "sequence_crc64"
+    SEQUENCE_MD5 = "sequence_md5"
+
+    # Organism extended
+    ORGANISM_COMMON_NAME = "organism_common_name"
+    ORGANISM_SYNONYMS = "organism_synonyms"
+    ORGANISM_LINEAGE = "organism_lineage"
+
+    # Gene extended
+    GENE_ORF_NAMES = "gene_orf_names"
+    GENE_ORDERED_LOCUS_NAMES = "gene_ordered_locus_names"
+    GENE_LOCATION = "gene_location"
 
     @classmethod
     def _missing_(cls, value: str):
@@ -137,6 +152,8 @@ class UniprotNodeField(Enum, metaclass=UniprotEnumMeta):
             cls.EC_NUMBERS.value,
             cls.ALTERNATIVE_NAMES_JSON.value,
             cls.PROTEIN_FLAG.value,
+            cls.SEQUENCE_CRC64.value,
+            cls.SEQUENCE_MD5.value,
         ]
 
     @classmethod
@@ -149,11 +166,19 @@ class UniprotNodeField(Enum, metaclass=UniprotEnumMeta):
             cls.ENSEMBL_GENE_IDS.value,
             cls.PRIMARY_GENE_NAME.value,
             cls.NT_EMBEDDING.value,
+            cls.GENE_ORF_NAMES.value,
+            cls.GENE_ORDERED_LOCUS_NAMES.value,
+            cls.GENE_LOCATION.value,
         ]
 
     @classmethod
     def get_organism_properties(cls) -> list:
-        return [cls.ORGANISM.value]
+        return [
+            cls.ORGANISM.value,
+            cls.ORGANISM_COMMON_NAME.value,
+            cls.ORGANISM_SYNONYMS.value,
+            cls.ORGANISM_LINEAGE.value,
+        ]
 
     @classmethod
     def get_split_fields(cls) -> list:
@@ -419,6 +444,12 @@ class UniprotSwissprot:
         if UniprotNodeField.SEQUENCE.value in self.node_fields:
             self.data[UniprotNodeField.SEQUENCE.value][protein_id] = seq.get("value")
 
+        if UniprotNodeField.SEQUENCE_CRC64.value in self.node_fields:
+            self.data[UniprotNodeField.SEQUENCE_CRC64.value][protein_id] = seq.get("crc64")
+
+        if UniprotNodeField.SEQUENCE_MD5.value in self.node_fields:
+            self.data[UniprotNodeField.SEQUENCE_MD5.value][protein_id] = seq.get("md5")
+
         # Extract organism info
         org = entry.get("organism", {})
         if UniprotNodeField.ORGANISM.value in self.node_fields:
@@ -426,6 +457,19 @@ class UniprotSwissprot:
 
         if UniprotNodeField.ORGANISM_ID.value in self.node_fields:
             self.data[UniprotNodeField.ORGANISM_ID.value][protein_id] = org.get("taxonId")
+
+        if UniprotNodeField.ORGANISM_COMMON_NAME.value in self.node_fields:
+            self.data[UniprotNodeField.ORGANISM_COMMON_NAME.value][protein_id] = org.get("commonName")
+
+        if UniprotNodeField.ORGANISM_SYNONYMS.value in self.node_fields:
+            synonyms = org.get("synonyms", [])
+            if synonyms:
+                self.data[UniprotNodeField.ORGANISM_SYNONYMS.value][protein_id] = synonyms
+
+        if UniprotNodeField.ORGANISM_LINEAGE.value in self.node_fields:
+            lineage = org.get("lineage", [])
+            if lineage:
+                self.data[UniprotNodeField.ORGANISM_LINEAGE.value][protein_id] = lineage
 
         # Extract protein description
         desc = entry.get("proteinDescription", {})
@@ -462,6 +506,9 @@ class UniprotSwissprot:
         if genes:
             gene_names = []
             primary_gene = None
+            orf_names = []
+            ordered_locus_names = []
+
             for gene_data in genes:
                 if gene_data.get("geneName"):
                     gene_name = gene_data["geneName"].get("value")
@@ -473,12 +520,39 @@ class UniprotSwissprot:
                 for syn in gene_data.get("synonyms", []):
                     if syn.get("value"):
                         gene_names.append(syn.get("value"))
+                # Extract orfNames
+                for orf in gene_data.get("orfNames", []):
+                    if orf.get("value"):
+                        orf_names.append(orf.get("value"))
+                # Extract orderedLocusNames
+                for oln in gene_data.get("orderedLocusNames", []):
+                    if oln.get("value"):
+                        ordered_locus_names.append(oln.get("value"))
 
             if UniprotNodeField.PROTEIN_GENE_NAMES.value in self.node_fields and gene_names:
                 self.data[UniprotNodeField.PROTEIN_GENE_NAMES.value][protein_id] = gene_names if len(gene_names) > 1 else gene_names[0]
 
             if UniprotNodeField.PRIMARY_GENE_NAME.value in self.node_fields and primary_gene:
                 self.data[UniprotNodeField.PRIMARY_GENE_NAME.value][protein_id] = primary_gene
+
+            if UniprotNodeField.GENE_ORF_NAMES.value in self.node_fields and orf_names:
+                self.data[UniprotNodeField.GENE_ORF_NAMES.value][protein_id] = orf_names if len(orf_names) > 1 else orf_names[0]
+
+            if UniprotNodeField.GENE_ORDERED_LOCUS_NAMES.value in self.node_fields and ordered_locus_names:
+                self.data[UniprotNodeField.GENE_ORDERED_LOCUS_NAMES.value][protein_id] = ordered_locus_names if len(ordered_locus_names) > 1 else ordered_locus_names[0]
+
+        # Extract gene locations
+        if UniprotNodeField.GENE_LOCATION.value in self.node_fields:
+            gene_locs = entry.get("geneLocations", [])
+            if gene_locs:
+                loc_data = []
+                for loc in gene_locs:
+                    loc_info = {
+                        "value": loc.get("value"),
+                        "type": loc.get("geneEncodingType")
+                    }
+                    loc_data.append(loc_info)
+                self.data[UniprotNodeField.GENE_LOCATION.value][protein_id] = loc_data if len(loc_data) > 1 else loc_data[0]
 
         # === Extended protein properties extraction ===
         
@@ -501,15 +575,18 @@ class UniprotSwissprot:
         entry_audit = entry.get("entryAudit", {})
         if UniprotNodeField.FIRST_PUBLIC_DATE.value in self.node_fields:
             self.data[UniprotNodeField.FIRST_PUBLIC_DATE.value][protein_id] = entry_audit.get("firstPublicDate")
-        
+
         if UniprotNodeField.LAST_ANNOTATION_UPDATE_DATE.value in self.node_fields:
             self.data[UniprotNodeField.LAST_ANNOTATION_UPDATE_DATE.value][protein_id] = entry_audit.get("lastAnnotationUpdateDate")
-        
+
+        if UniprotNodeField.LAST_SEQUENCE_UPDATE_DATE.value in self.node_fields:
+            self.data[UniprotNodeField.LAST_SEQUENCE_UPDATE_DATE.value][protein_id] = entry_audit.get("lastSequenceUpdateDate")
+
         if UniprotNodeField.ENTRY_VERSION.value in self.node_fields:
             self.data[UniprotNodeField.ENTRY_VERSION.value][protein_id] = entry_audit.get("entryVersion")
-        
+
         if UniprotNodeField.SEQUENCE_VERSION.value in self.node_fields:
-            self.data[UniprotNodeField.SEQUENCE_VERSION.value][protein_id] = entry.get("sequence", {}).get("version")
+            self.data[UniprotNodeField.SEQUENCE_VERSION.value][protein_id] = entry_audit.get("sequenceVersion")
         
         # Extended protein description
         if UniprotNodeField.RECOMMENDED_SHORT_NAMES.value in self.node_fields:
@@ -1145,15 +1222,19 @@ class UniprotSwissprot:
             self._extract_interactions(protein_id, entry)
 
     def _extract_keywords(self, protein_id: str, entry: dict):
-        """Extract keywords from entry."""
+        """Extract keywords from entry with full data (id, category, name)."""
         keywords = entry.get("keywords", [])
-        keyword_ids = []
+        keyword_data = []
         for kw in keywords:
             kw_id = kw.get("id")
             if kw_id:
-                keyword_ids.append(kw_id)
-        if keyword_ids:
-            self.protein_keywords[protein_id] = keyword_ids
+                keyword_data.append({
+                    "id": kw_id,
+                    "category": kw.get("category"),
+                    "name": kw.get("name")
+                })
+        if keyword_data:
+            self.protein_keywords[protein_id] = keyword_data
 
     def _extract_annotations(self, protein_id: str, entry: dict):
         """Dynamically extract all comment types as functional annotations."""
@@ -1486,24 +1567,27 @@ class UniprotSwissprot:
         edge_label: str = "protein_has_keyword"
     ) -> Generator[tuple[None, str, str, str, dict], None, None]:
         """
-        Yield Protein -> Keyword edges.
+        Yield Protein -> Keyword edges with category and name properties.
         """
         if UniprotEdgeType.PROTEIN_TO_KEYWORD not in self.edge_types:
             return
 
         logger.info("Preparing Protein -> Keyword edges...")
-        
+
         base_props = {
             "source": self.data_source,
             "licence": self.data_licence,
             "version": self.data_version,
         }
-        
-        for protein_id, keyword_ids in self.protein_keywords.items():
+
+        for protein_id, keyword_data in self.protein_keywords.items():
             source_id = self.add_prefix_to_id("uniprot", protein_id)
-            for kw_id in keyword_ids:
-                target_id = self.add_prefix_to_id("uniprot.keyword", kw_id)
-                yield (None, source_id, target_id, edge_label, base_props.copy())
+            for kw in keyword_data:
+                target_id = self.add_prefix_to_id("uniprot.keyword", kw["id"])
+                props = base_props.copy()
+                props["keyword_category"] = kw.get("category")
+                props["keyword_name"] = kw.get("name")
+                yield (None, source_id, target_id, edge_label, props)
 
     def get_annotation_edges(
         self,
