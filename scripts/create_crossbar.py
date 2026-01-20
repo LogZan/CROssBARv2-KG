@@ -118,9 +118,22 @@ from biocypher import BioCypher
 # dirs
 timestamp = datetime.now(TZ).strftime("%Y%m%d%H%M%S")
 output_dir_path = str(project_root / "biocypher-out")
-embeddings_dir_path = '/GenSIvePFS/users/data/embeddings'
+embeddings_dir = '/GenSIvePFS/users/data/embeddings'
 malacards_dir_path = '/GenSIvePFS/users/data/malacards'
 uniprot_json_path = '/GenSIvePFS/users/data/UniProt/UniProtKB_SwissProt/uniprotkb_reviewed_true_2025_11_04.json'
+
+# Embedding file paths
+prott5_embedding_path = f'{embeddings_dir}/prott5_protein_embeddings.h5'
+esm2_embedding_path = f'{embeddings_dir}/esm2_t33_650M_UR50D_protein_embedding.h5'
+nt_embedding_path = f'{embeddings_dir}/nucleotide_transformerv2_2.5b_multispecies_embeddings.h5'
+selformer_drug_embedding_path = f'{embeddings_dir}/selformer_drug_embeddings.h5'
+selformer_compound_embedding_path = f'{embeddings_dir}/selformer_compound_embeddings.h5'
+doc2vec_disease_embedding_path = f'{embeddings_dir}/doc2vec_disease_embedding.h5'
+biokeen_pathway_embedding_path = f'{embeddings_dir}/biokeen_pathway_embedding.h5'
+rxnfp_ec_embedding_path = f'{embeddings_dir}/rxnfp_ec_number_embedding.h5'
+anc2vec_go_embedding_path = f'{embeddings_dir}/anc2vec_go_term_embedding.h5'
+cada_phenotype_embedding_path = f'{embeddings_dir}/cada_phenotype_embedding.h5'
+dom2vec_domain_embedding_path = f'{embeddings_dir}/dom2vec_domain_embedding.h5'
 
 
 # Helper for consistent logging
@@ -147,13 +160,13 @@ CACHE = True
 export_as_csv = True
 
 # Flag for test mode
-TEST_MODE = True
-# TEST_MODE = False
+# TEST_MODE = True
+TEST_MODE = False
 
 # Flag to dynamically update schema with discovered annotation/feature types
 # Set to True on first run to add new types, then set to False for subsequent runs
-UPDATE_SCHEMA_DYNAMICALLY = False
-# UPDATE_SCHEMA_DYNAMICALLY = True
+# UPDATE_SCHEMA_DYNAMICALLY = False
+UPDATE_SCHEMA_DYNAMICALLY = True
 
 # Organism filter for adapters
 # Use "*" for all organisms, or specify NCBI taxonomy ID (e.g., 9606 for human)
@@ -297,10 +310,10 @@ try:
             test_mode=TEST_MODE,
         )
 
-    uniprot_adapter.download_uniprot_data(cache=CACHE, 
-            prott5_embedding_output_path=embeddings_dir_path,
-            esm2_embedding_path=embeddings_dir_path,
-            nucleotide_transformer_embedding_path=embeddings_dir_path)
+    uniprot_adapter.download_uniprot_data(cache=CACHE,
+            prott5_embedding_output_path=prott5_embedding_path,
+            esm2_embedding_path=esm2_embedding_path,
+            nucleotide_transformer_embedding_path=nt_embedding_path)
 
     # Optionally update schema with dynamically discovered types
     if UPDATE_SCHEMA_DYNAMICALLY:
@@ -414,6 +427,7 @@ try:
     )
 
     interpro_adapter.download_interpro_data(cache=CACHE)
+    interpro_adapter.download_domain_node_data(dom2vec_embedding_path=dom2vec_domain_embedding_path, cache=CACHE)
 
     bc.write_nodes(interpro_adapter.get_interpro_nodes())
     bc.write_edges(interpro_adapter.get_interpro_edges())
@@ -436,7 +450,7 @@ try:
         organism=ORGANISM,
         test_mode=TEST_MODE
     )
-    go_adapter.download_go_data(cache=CACHE)
+    go_adapter.download_go_data(cache=CACHE, anc2vec_embedding_path=anc2vec_go_embedding_path)
     bc.write_nodes(go_adapter.get_go_nodes())
     bc.write_edges(go_adapter.get_go_edges())
     if export_as_csv:
@@ -459,7 +473,7 @@ try:
         output_dir=output_dir_path,
         test_mode=TEST_MODE,
     )
-    drug_adapter.download_drug_data(cache=CACHE, selformer_embedding_path=embeddings_dir_path)
+    drug_adapter.download_drug_data(cache=CACHE, selformer_embedding_path=selformer_drug_embedding_path)
     drug_adapter.process_drug_data()
     bc.write_nodes(drug_adapter.get_drug_nodes())
     bc.write_edges(drug_adapter.get_edges())
@@ -483,7 +497,7 @@ try:
         output_dir=output_dir_path,
         test_mode=TEST_MODE,
     )
-    compound_adapter.download_compound_data(cache=CACHE, selformer_embedding_path=embeddings_dir_path)
+    compound_adapter.download_compound_data(cache=CACHE, selformer_embedding_path=selformer_compound_embedding_path)
     compound_adapter.process_compound_data()
     bc.write_nodes(compound_adapter.get_compound_nodes())
     bc.write_edges(compound_adapter.get_cti_edges())
@@ -528,7 +542,7 @@ try:
         test_mode=TEST_MODE
     )
     disease_adapter.download_disease_data(cache=CACHE,
-        doc2vec_embedding_path=embeddings_dir_path,
+        doc2vec_embedding_path=doc2vec_disease_embedding_path,
         malacards_dir_path=malacards_dir_path,
         malacards_related_diseases_json_path=malacards_dir_path
         )
@@ -550,7 +564,7 @@ try:
         output_dir=output_dir_path,
         test_mode=TEST_MODE
     )
-    phenotype_adapter.download_hpo_data(cache=CACHE, cache_dir_path=embeddings_dir_path)
+    phenotype_adapter.download_hpo_data(cache=CACHE, cache_dir_path=embeddings_dir, cada_embedding_path=cada_phenotype_embedding_path)
     bc.write_nodes(phenotype_adapter.get_nodes())
     bc.write_edges(phenotype_adapter.get_edges())
 except Exception as e:
@@ -574,7 +588,7 @@ try:
         test_mode=TEST_MODE,
         kegg_organism=kegg_organism,
     )
-    pathway_adapter.download_pathway_data(cache=CACHE, biokeen_embedding_path=embeddings_dir_path)
+    pathway_adapter.download_pathway_data(cache=CACHE, biokeen_embedding_path=biokeen_pathway_embedding_path)
     bc.write_nodes(pathway_adapter.get_nodes())
     bc.write_edges(pathway_adapter.get_edges())
 except Exception as e:
@@ -620,7 +634,7 @@ try:
         test_mode=TEST_MODE,
         organism=ORGANISM,
     )
-    ec_adapter.download_ec_data(cache=CACHE, rxnfp_embedding_path=embeddings_dir_path)
+    ec_adapter.download_ec_data(cache=CACHE, rxnfp_embedding_path=rxnfp_ec_embedding_path)
     bc.write_nodes(ec_adapter.get_nodes())
     bc.write_edges(ec_adapter.get_edges())
 except Exception as e:
