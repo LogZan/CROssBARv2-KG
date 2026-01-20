@@ -121,11 +121,17 @@ CACHE = True
 export_as_csv = True
 
 # Flag for test mode
-TEST_MODE = True
+# TEST_MODE = True
+TEST_MODE = False
 
 # Flag to dynamically update schema with discovered annotation/feature types
 # Set to True on first run to add new types, then set to False for subsequent runs
 UPDATE_SCHEMA_DYNAMICALLY = False
+# UPDATE_SCHEMA_DYNAMICALLY = True
+
+# Flag for low memory mode
+# Set to True to enable memory optimization
+LOW_MEMORY_MODE = False
 
 
 def update_schema_with_dynamic_types(schema_path: str, annotation_types: set, feature_types: set):
@@ -386,7 +392,7 @@ try:
         export_csv=export_as_csv, 
         output_dir=output_dir_path,
         test_mode=TEST_MODE,
-        low_memory_mode=True  # Enable memory optimization
+        low_memory_mode=LOW_MEMORY_MODE
     )
     drug_adapter.download_drug_data(cache=CACHE)
     drug_adapter.process_drug_data()

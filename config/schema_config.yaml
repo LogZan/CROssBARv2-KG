@@ -749,12 +749,19 @@ protein to sequence feature association:
   properties:
     start_position: int
     end_position: int
+    start_modifier: str
+    end_modifier: str
     description: str
     original_sequence: str
     alternative_sequence: str
     ligand_name: str
     ligand_id: str
     feature_id: str
+    evidence_codes: str[]
+    pubmed_ids: str[]
+    pdb_ids: str[]
+    prosite_ids: str[]
+    chebi_ids: str[]
 protein to uniprot disease association:
   is_a: association
   represented_as: edge
@@ -908,3 +915,39 @@ helix feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: helix_feature
+allergen annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: allergen_annotation
+toxic dose annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: toxic_dose_annotation
+pharmaceutical annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: pharmaceutical_annotation
+disease annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: disease_annotation
+rna editing annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: rna_editing_annotation
+non standard residue feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: non_standard_residue_feature
+sequence uncertainty feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: sequence_uncertainty_feature
+non adjacent residues feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: non_adjacent_residues_feature
+initiator methionine feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: initiator_methionine_feature
