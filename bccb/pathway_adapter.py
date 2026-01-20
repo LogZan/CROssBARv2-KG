@@ -236,7 +236,7 @@ class Pathway:
 
             self.download_compath_data()
 
-            if PathwayNodeField.BIOKEEN_EMBEDDING.value in self.pathway_node_fields and not self.test_mode:
+            if PathwayNodeField.BIOKEEN_EMBEDDING.value in self.pathway_node_fields:
                 self.retrieve_biokeen_embeddings(biokeen_embedding_path=biokeen_embedding_path)
 
     def download_reactome_data(self) -> None:

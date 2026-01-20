@@ -1,5 +1,14 @@
 # CROssBARv2 Knowledge Graph Construction Configuration
 
+# General settings
+settings:
+  test_mode: false                     # Limit data for testing (100 entries)
+  cache: true                          # Cache data by pypath for future usage
+  export_csv: true                     # Export node and edge files as CSV
+  update_schema_dynamically: false      # Auto-update schema with new annotation/feature types
+  organism: 9606                       # NCBI taxonomy ID (9606=human, "*"=all)
+  use_embeddings: false                 # Load and use embeddings (set false to skip for faster processing)
+
 # Data paths
 data_paths:
   uniprot_json: '/GenSIvePFS/users/data/UniProt/UniProtKB_SwissProt/uniprotkb_reviewed_true_2025_11_04.json'
@@ -25,14 +34,6 @@ embeddings:
 drugbank:
   user: 'zengchuanlong23@mails.ucas.ac.cn'
   password: 'iHDTbZ3vpFaWzC'
-
-# General settings
-settings:
-  cache: true                          # Cache data by pypath for future usage
-  export_csv: true                     # Export node and edge files as CSV
-  test_mode: false                     # Limit data for testing (100 entries)
-  update_schema_dynamically: true      # Auto-update schema with new annotation/feature types
-  organism: 9606                       # NCBI taxonomy ID (9606=human, "*"=all)
 
 # UniProt SwissProt configuration
 uniprot:

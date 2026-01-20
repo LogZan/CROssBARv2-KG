@@ -344,7 +344,7 @@ class Drug:
 
             self.download_drugbank_node_data()
 
-            if DrugNodeField.SELFORMER_EMBEDDING.value in self.node_fields and not self.test_mode:
+            if DrugNodeField.SELFORMER_EMBEDDING.value in self.node_fields:
                 self.retrieve_selformer_embeddings(selformer_embedding_path)
 
             if DrugEdgeType.DRUG_TARGET_INTERACTION in self.edge_types:

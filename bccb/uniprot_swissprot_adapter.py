@@ -25,9 +25,6 @@ from bioregistry import normalize_curie
 
 from pydantic import BaseModel, DirectoryPath, FilePath, HttpUrl, validate_call
 
-# Default embedding directory
-DEFAULT_EMBEDDING_DIR = "/GenSIvePFS/users/data/UniProt/UniProtKB_SwissProt/embeddings"
-
 logger.debug(f"Loading module {__name__}.")
 
 
@@ -384,17 +381,17 @@ class UniprotSwissprot:
         self._load_json_data()
 
         # Load embeddings if requested
-        if UniprotNodeField.PROTT5_EMBEDDING.value in self.node_fields and not self.test_mode:
+        if UniprotNodeField.PROTT5_EMBEDDING.value in self.node_fields:
             self.data[UniprotNodeField.PROTT5_EMBEDDING.value] = {}
             self.download_prott5_embeddings(
                 prott5_embedding_output_path=prott5_embedding_output_path
             )
 
-        if UniprotNodeField.ESM2_EMBEDDING.value in self.node_fields and not self.test_mode:
+        if UniprotNodeField.ESM2_EMBEDDING.value in self.node_fields:
             self.data[UniprotNodeField.ESM2_EMBEDDING.value] = {}
             self.retrieve_esm2_embeddings(esm2_embedding_path)
 
-        if UniprotNodeField.NT_EMBEDDING.value in self.node_fields and not self.test_mode:
+        if UniprotNodeField.NT_EMBEDDING.value in self.node_fields:
             self.data[UniprotNodeField.NT_EMBEDDING.value] = {}
             self.retrieve_nucleotide_transformer_embeddings(
                 nucleotide_transformer_embedding_path
@@ -730,18 +727,17 @@ class UniprotSwissprot:
         If the file exists in the defined file path, then directly reads it.
 
         Args:
-            prott5_embedding_output_path: Path to the h5 file. Defaults to embedding dir.
+            prott5_embedding_output_path: Path to the h5 file. If None, skip embedding loading.
         """
+        if not prott5_embedding_output_path:
+            logger.info("No ProtT5 embedding path provided, skipping embedding loading.")
+            return
+
         url: HttpUrl = (
             "https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/embeddings/uniprot_sprot/per-protein.h5"
         )
-        
-        if prott5_embedding_output_path:
-            full_path = str(prott5_embedding_output_path)
-        else:
-            # Create default embedding directory if it doesn't exist
-            os.makedirs(DEFAULT_EMBEDDING_DIR, exist_ok=True)
-            full_path = os.path.join(DEFAULT_EMBEDDING_DIR, "prott5_protein_embeddings.h5")
+
+        full_path = str(prott5_embedding_output_path)
 
         if not os.path.isfile(full_path):
             logger.info(f"Downloading ProtT5 embeddings to {full_path}...")
@@ -785,12 +781,15 @@ class UniprotSwissprot:
         Load ESM2 embeddings from h5 file.
         Note: ESM2 embeddings are not available for download from UniProt,
         so this method requires a local file path.
+
+        Args:
+            esm2_embedding_path: Path to the h5 file. If None, skip embedding loading.
         """
-        if esm2_embedding_path:
-            full_path = str(esm2_embedding_path)
-        else:
-            # Default path for ESM2 embeddings
-            full_path = os.path.join(DEFAULT_EMBEDDING_DIR, "esm2_embeddings.h5")
+        if not esm2_embedding_path:
+            logger.info("No ESM2 embedding path provided, skipping embedding loading.")
+            return
+
+        full_path = str(esm2_embedding_path)
 
         if not os.path.isfile(full_path):
             logger.warning(f"ESM2 embedding file not found at {full_path}. Skipping ESM2 embeddings.")
@@ -822,12 +821,15 @@ class UniprotSwissprot:
         """
         Load Nucleotide Transformer embeddings from h5 file.
         Note: NT embeddings require a local file path.
+
+        Args:
+            nucleotide_transformer_embedding_path: Path to the h5 file. If None, skip embedding loading.
         """
-        if nucleotide_transformer_embedding_path:
-            full_path = str(nucleotide_transformer_embedding_path)
-        else:
-            # Default path for NT embeddings
-            full_path = os.path.join(DEFAULT_EMBEDDING_DIR, "nt_embeddings.h5")
+        if not nucleotide_transformer_embedding_path:
+            logger.info("No Nucleotide Transformer embedding path provided, skipping embedding loading.")
+            return
+
+        full_path = str(nucleotide_transformer_embedding_path)
 
         if not os.path.isfile(full_path):
             logger.warning(f"Nucleotide Transformer embedding file not found at {full_path}. Skipping NT embeddings.")

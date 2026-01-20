@@ -163,6 +163,7 @@ export_as_csv = config['settings']['export_csv']
 TEST_MODE = config['settings']['test_mode']
 UPDATE_SCHEMA_DYNAMICALLY = config['settings']['update_schema_dynamically']
 ORGANISM = config['settings']['organism']
+USE_EMBEDDINGS = config['settings']['use_embeddings']
 
 
 def update_schema_with_dynamic_types(schema_path: str, annotation_types: set, feature_types: set):
@@ -250,9 +251,9 @@ try:
         )
 
     uniprot_adapter.download_uniprot_data(cache=CACHE,
-            prott5_embedding_output_path=prott5_embedding_path,
-            esm2_embedding_path=esm2_embedding_path,
-            nucleotide_transformer_embedding_path=nt_embedding_path)
+            prott5_embedding_output_path=prott5_embedding_path if USE_EMBEDDINGS else None,
+            esm2_embedding_path=esm2_embedding_path if USE_EMBEDDINGS else None,
+            nucleotide_transformer_embedding_path=nt_embedding_path if USE_EMBEDDINGS else None)
 
     # Optionally update schema with dynamically discovered types
     if UPDATE_SCHEMA_DYNAMICALLY:
@@ -366,7 +367,7 @@ try:
     )
 
     interpro_adapter.download_interpro_data(cache=CACHE)
-    interpro_adapter.download_domain_node_data(dom2vec_embedding_path=dom2vec_domain_embedding_path, cache=CACHE)
+    interpro_adapter.download_domain_node_data(dom2vec_embedding_path=dom2vec_domain_embedding_path if USE_EMBEDDINGS else None, cache=CACHE)
 
     bc.write_nodes(interpro_adapter.get_interpro_nodes())
     bc.write_edges(interpro_adapter.get_interpro_edges())
@@ -389,7 +390,7 @@ try:
         organism=ORGANISM,
         test_mode=TEST_MODE
     )
-    go_adapter.download_go_data(cache=CACHE, anc2vec_embedding_path=anc2vec_go_embedding_path)
+    go_adapter.download_go_data(cache=CACHE, anc2vec_embedding_path=anc2vec_go_embedding_path if USE_EMBEDDINGS else None)
     bc.write_nodes(go_adapter.get_go_nodes())
     bc.write_edges(go_adapter.get_go_edges())
     if export_as_csv:
@@ -412,7 +413,7 @@ try:
         output_dir=output_dir_path,
         test_mode=TEST_MODE,
     )
-    drug_adapter.download_drug_data(cache=CACHE, selformer_embedding_path=selformer_drug_embedding_path)
+    drug_adapter.download_drug_data(cache=CACHE, selformer_embedding_path=selformer_drug_embedding_path if USE_EMBEDDINGS else None)
     drug_adapter.process_drug_data()
     bc.write_nodes(drug_adapter.get_drug_nodes())
     bc.write_edges(drug_adapter.get_edges())
@@ -436,7 +437,7 @@ try:
         output_dir=output_dir_path,
         test_mode=TEST_MODE,
     )
-    compound_adapter.download_compound_data(cache=CACHE, selformer_embedding_path=selformer_compound_embedding_path)
+    compound_adapter.download_compound_data(cache=CACHE, selformer_embedding_path=selformer_compound_embedding_path if USE_EMBEDDINGS else None)
     compound_adapter.process_compound_data()
     bc.write_nodes(compound_adapter.get_compound_nodes())
     bc.write_edges(compound_adapter.get_cti_edges())
@@ -481,7 +482,7 @@ try:
         test_mode=TEST_MODE
     )
     disease_adapter.download_disease_data(cache=CACHE,
-        doc2vec_embedding_path=doc2vec_disease_embedding_path,
+        doc2vec_embedding_path=doc2vec_disease_embedding_path if USE_EMBEDDINGS else None,
         malacards_dir_path=malacards_dir_path,
         malacards_related_diseases_json_path=malacards_dir_path
         )
@@ -503,7 +504,7 @@ try:
         output_dir=output_dir_path,
         test_mode=TEST_MODE
     )
-    phenotype_adapter.download_hpo_data(cache=CACHE, cache_dir_path=embeddings_dir, cada_embedding_path=cada_phenotype_embedding_path)
+    phenotype_adapter.download_hpo_data(cache=CACHE, cache_dir_path=embeddings_dir, cada_embedding_path=cada_phenotype_embedding_path if USE_EMBEDDINGS else None)
     bc.write_nodes(phenotype_adapter.get_nodes())
     bc.write_edges(phenotype_adapter.get_edges())
 except Exception as e:
@@ -527,7 +528,7 @@ try:
         test_mode=TEST_MODE,
         kegg_organism=kegg_organism,
     )
-    pathway_adapter.download_pathway_data(cache=CACHE, biokeen_embedding_path=biokeen_pathway_embedding_path)
+    pathway_adapter.download_pathway_data(cache=CACHE, biokeen_embedding_path=biokeen_pathway_embedding_path if USE_EMBEDDINGS else None)
     bc.write_nodes(pathway_adapter.get_nodes())
     bc.write_edges(pathway_adapter.get_edges())
 except Exception as e:
@@ -573,7 +574,7 @@ try:
         test_mode=TEST_MODE,
         organism=ORGANISM,
     )
-    ec_adapter.download_ec_data(cache=CACHE, rxnfp_embedding_path=rxnfp_ec_embedding_path)
+    ec_adapter.download_ec_data(cache=CACHE, rxnfp_embedding_path=rxnfp_ec_embedding_path if USE_EMBEDDINGS else None)
     bc.write_nodes(ec_adapter.get_nodes())
     bc.write_edges(ec_adapter.get_edges())
 except Exception as e:

@@ -139,7 +139,7 @@ class EC:
 
             self.prepare_ec_hierarchy_dict()
 
-            if ECNodeField.RXFNP_EMBEDDING.value in self.ec_node_fields and not self.test_mode:
+            if ECNodeField.RXFNP_EMBEDDING.value in self.ec_node_fields:
                 self.retrieve_rxfnp_embeddings(rxnfp_embedding_path)
 
             t1 = time()

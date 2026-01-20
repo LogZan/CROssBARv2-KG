@@ -203,7 +203,7 @@ class Compound:
 
             self.download_chembl_data()
 
-            if CompoundNodeField.SELFORMER_EMBEDDING.value in self.node_fields and not self.test_mode:
+            if CompoundNodeField.SELFORMER_EMBEDDING.value in self.node_fields:
                 self.retrieve_selformer_embeddings(
                     selformer_embedding_path=selformer_embedding_path
                 )
