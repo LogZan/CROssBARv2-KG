@@ -1,0 +1,98 @@
+# CROssBARv2 Knowledge Graph Construction Configuration
+
+# Data paths
+data_paths:
+  uniprot_json: '/GenSIvePFS/users/data/UniProt/UniProtKB_SwissProt/uniprotkb_reviewed_true_2025_11_04.json'
+  uniprot_keywords_json: '/GenSIvePFS/users/data/UniProt/keywords_all_2025_12_25.json'
+  embeddings_dir: '/GenSIvePFS/users/data/embeddings'
+  malacards_dir: '/GenSIvePFS/users/data/malacards'
+
+# Embedding file names (relative to embeddings_dir)
+embeddings:
+  prott5: 'prott5_protein_embeddings.h5'
+  esm2: 'esm2_t33_650M_UR50D_protein_embedding.h5'
+  nucleotide_transformer: 'nucleotide_transformerv2_2.5b_multispecies_embeddings.h5'
+  selformer_drug: 'selformer_drug_embeddings.h5'
+  selformer_compound: 'selformer_compound_embeddings.h5'
+  doc2vec_disease: 'doc2vec_disease_embedding.h5'
+  biokeen_pathway: 'biokeen_pathway_embedding.h5'
+  rxnfp_ec: 'rxnfp_ec_number_embedding.h5'
+  anc2vec_go: 'anc2vec_go_term_embedding.h5'
+  cada_phenotype: 'cada_phenotype_embedding.h5'
+  dom2vec_domain: 'dom2vec_domain_embedding.h5'
+
+# DrugBank credentials
+drugbank:
+  user: 'zengchuanlong23@mails.ucas.ac.cn'
+  password: 'iHDTbZ3vpFaWzC'
+
+# General settings
+settings:
+  cache: true                          # Cache data by pypath for future usage
+  export_csv: true                     # Export node and edge files as CSV
+  test_mode: false                     # Limit data for testing (100 entries)
+  update_schema_dynamically: true      # Auto-update schema with new annotation/feature types
+  organism: 9606                       # NCBI taxonomy ID (9606=human, "*"=all)
+
+# UniProt SwissProt configuration
+uniprot:
+  node_types:
+    - PROTEIN
+    - GENE
+    - ORGANISM
+    - FUNCTIONAL_ANNOTATION
+    - SEQUENCE_FEATURE
+    - UNIPROT_DISEASE
+
+  node_fields:
+    - PRIMARY_GENE_NAME
+    - LENGTH
+    - MASS
+    - ORGANISM
+    - ORGANISM_ID
+    - PROTEIN_NAMES
+    - PROTEIN_GENE_NAMES
+    - ENSEMBL_TRANSCRIPT_IDS
+    - ENSEMBL_GENE_IDS
+    - ENTREZ_GENE_IDS
+    - KEGG_IDS
+    - PROTEOME
+    - SEQUENCE
+    - UNIPROT_KB_ID
+    - SECONDARY_ACCESSIONS
+    - PROTEIN_EXISTENCE
+    - ANNOTATION_SCORE
+    - FIRST_PUBLIC_DATE
+    - LAST_ANNOTATION_UPDATE_DATE
+    - ENTRY_VERSION
+    - SEQUENCE_VERSION
+    - RECOMMENDED_SHORT_NAMES
+    - EC_NUMBERS
+    - ALTERNATIVE_NAMES_JSON
+    - PROTEIN_FLAG
+    - PROTT5_EMBEDDING
+    - ESM2_EMBEDDING
+    - NT_EMBEDDING
+
+  edge_types:
+    - PROTEIN_TO_ORGANISM
+    - GENE_TO_PROTEIN
+    - PROTEIN_TO_KEYWORD
+    - PROTEIN_TO_ANNOTATION
+    - PROTEIN_TO_FEATURE
+    - PROTEIN_TO_DISEASE
+
+  id_fields:
+    - GENE_ENTREZ_ID
+
+# UniProt Keywords configuration
+keywords:
+  node_types:
+    - KEYWORD
+  edge_types:
+    - KEYWORD_HIERARCHY
+    - KEYWORD_TO_GO
+
+# Pathway configuration
+pathway:
+  kegg_organism: ['hsa']  # Use ['hsa'] for test mode, or organism code for production

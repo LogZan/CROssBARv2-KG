@@ -115,25 +115,29 @@ from bccb.tfgen_adapter import (
 
 from biocypher import BioCypher
 
-# dirs
+# Load configuration
+with open(project_root / "config/crossbar_config.yaml", 'r') as f:
+    config = yaml.safe_load(f)
+
+# Extract config values
 timestamp = datetime.now(TZ).strftime("%Y%m%d%H%M%S")
 output_dir_path = str(project_root / "biocypher-out")
-embeddings_dir = '/GenSIvePFS/users/data/embeddings'
-malacards_dir_path = '/GenSIvePFS/users/data/malacards'
-uniprot_json_path = '/GenSIvePFS/users/data/UniProt/UniProtKB_SwissProt/uniprotkb_reviewed_true_2025_11_04.json'
+embeddings_dir = config['data_paths']['embeddings_dir']
+malacards_dir_path = config['data_paths']['malacards_dir']
+uniprot_json_path = config['data_paths']['uniprot_json']
 
 # Embedding file paths
-prott5_embedding_path = f'{embeddings_dir}/prott5_protein_embeddings.h5'
-esm2_embedding_path = f'{embeddings_dir}/esm2_t33_650M_UR50D_protein_embedding.h5'
-nt_embedding_path = f'{embeddings_dir}/nucleotide_transformerv2_2.5b_multispecies_embeddings.h5'
-selformer_drug_embedding_path = f'{embeddings_dir}/selformer_drug_embeddings.h5'
-selformer_compound_embedding_path = f'{embeddings_dir}/selformer_compound_embeddings.h5'
-doc2vec_disease_embedding_path = f'{embeddings_dir}/doc2vec_disease_embedding.h5'
-biokeen_pathway_embedding_path = f'{embeddings_dir}/biokeen_pathway_embedding.h5'
-rxnfp_ec_embedding_path = f'{embeddings_dir}/rxnfp_ec_number_embedding.h5'
-anc2vec_go_embedding_path = f'{embeddings_dir}/anc2vec_go_term_embedding.h5'
-cada_phenotype_embedding_path = f'{embeddings_dir}/cada_phenotype_embedding.h5'
-dom2vec_domain_embedding_path = f'{embeddings_dir}/dom2vec_domain_embedding.h5'
+prott5_embedding_path = f"{embeddings_dir}/{config['embeddings']['prott5']}"
+esm2_embedding_path = f"{embeddings_dir}/{config['embeddings']['esm2']}"
+nt_embedding_path = f"{embeddings_dir}/{config['embeddings']['nucleotide_transformer']}"
+selformer_drug_embedding_path = f"{embeddings_dir}/{config['embeddings']['selformer_drug']}"
+selformer_compound_embedding_path = f"{embeddings_dir}/{config['embeddings']['selformer_compound']}"
+doc2vec_disease_embedding_path = f"{embeddings_dir}/{config['embeddings']['doc2vec_disease']}"
+biokeen_pathway_embedding_path = f"{embeddings_dir}/{config['embeddings']['biokeen_pathway']}"
+rxnfp_ec_embedding_path = f"{embeddings_dir}/{config['embeddings']['rxnfp_ec']}"
+anc2vec_go_embedding_path = f"{embeddings_dir}/{config['embeddings']['anc2vec_go']}"
+cada_phenotype_embedding_path = f"{embeddings_dir}/{config['embeddings']['cada_phenotype']}"
+dom2vec_domain_embedding_path = f"{embeddings_dir}/{config['embeddings']['dom2vec_domain']}"
 
 
 # Helper for consistent logging
@@ -153,25 +157,12 @@ bc = BioCypher(biocypher_config_path= str(project_root / "config/biocypher_confi
                schema_config_path= str(project_root / "config/schema_config.yaml")
 )
 
-# Whether to cache data by pypath for future usage
-CACHE = True
-
-# Flag for exporting node and edge files as csv format
-export_as_csv = True
-
-# Flag for test mode
-# TEST_MODE = True
-TEST_MODE = False
-
-# Flag to dynamically update schema with discovered annotation/feature types
-# Set to True on first run to add new types, then set to False for subsequent runs
-# UPDATE_SCHEMA_DYNAMICALLY = False
-UPDATE_SCHEMA_DYNAMICALLY = True
-
-# Organism filter for adapters
-# Use "*" for all organisms, or specify NCBI taxonomy ID (e.g., 9606 for human)
-# ORGANISM = "*"
-ORGANISM = 9606  # Human only
+# Load settings from config
+CACHE = config['settings']['cache']
+export_as_csv = config['settings']['export_csv']
+TEST_MODE = config['settings']['test_mode']
+UPDATE_SCHEMA_DYNAMICALLY = config['settings']['update_schema_dynamically']
+ORGANISM = config['settings']['organism']
 
 
 def update_schema_with_dynamic_types(schema_path: str, annotation_types: set, feature_types: set):
@@ -236,67 +227,15 @@ def update_schema_with_dynamic_types(schema_path: str, annotation_types: set, fe
     return added_types
 
 
-# user and passwd
-drugbank_user = "zengchuanlong23@mails.ucas.ac.cn"
-drugbank_passwd = "iHDTbZ3vpFaWzC"
+# Load credentials and adapter configurations from config
+drugbank_user = config['drugbank']['user']
+drugbank_passwd = config['drugbank']['password']
 
-# uniprot configuration
-uniprot_node_types = [
-    UniprotNodeType.PROTEIN,
-    UniprotNodeType.GENE,
-    UniprotNodeType.ORGANISM,
-    # Extended types from SwissProt
-    UniprotNodeType.FUNCTIONAL_ANNOTATION,
-    UniprotNodeType.SEQUENCE_FEATURE,
-    UniprotNodeType.UNIPROT_DISEASE,
-]
-
-uniprot_node_fields = [
-    UniprotNodeField.PRIMARY_GENE_NAME,
-    UniprotNodeField.LENGTH,
-    UniprotNodeField.MASS,
-    UniprotNodeField.ORGANISM,
-    UniprotNodeField.ORGANISM_ID,
-    UniprotNodeField.PROTEIN_NAMES,
-    UniprotNodeField.PROTEIN_GENE_NAMES,
-    UniprotNodeField.ENSEMBL_TRANSCRIPT_IDS,
-    UniprotNodeField.ENSEMBL_GENE_IDS,
-    UniprotNodeField.ENTREZ_GENE_IDS,
-    UniprotNodeField.KEGG_IDS,
-    UniprotNodeField.PROTEOME,
-    UniprotNodeField.SEQUENCE,
-    # Extended protein properties
-    UniprotNodeField.UNIPROT_KB_ID,
-    UniprotNodeField.SECONDARY_ACCESSIONS,
-    UniprotNodeField.PROTEIN_EXISTENCE,
-    UniprotNodeField.ANNOTATION_SCORE,
-    UniprotNodeField.FIRST_PUBLIC_DATE,
-    UniprotNodeField.LAST_ANNOTATION_UPDATE_DATE,
-    UniprotNodeField.ENTRY_VERSION,
-    UniprotNodeField.SEQUENCE_VERSION,
-    UniprotNodeField.RECOMMENDED_SHORT_NAMES,
-    UniprotNodeField.EC_NUMBERS,
-    UniprotNodeField.ALTERNATIVE_NAMES_JSON,
-    UniprotNodeField.PROTEIN_FLAG,
-    UniprotNodeField.PROTT5_EMBEDDING,
-    UniprotNodeField.ESM2_EMBEDDING,
-    UniprotNodeField.NT_EMBEDDING,
-]
-
-uniprot_edge_types = [
-     UniprotEdgeType.PROTEIN_TO_ORGANISM,
-     UniprotEdgeType.GENE_TO_PROTEIN,
-     # Extended edge types from SwissProt
-     UniprotEdgeType.PROTEIN_TO_KEYWORD,
-     UniprotEdgeType.PROTEIN_TO_ANNOTATION,
-     UniprotEdgeType.PROTEIN_TO_FEATURE,
-     UniprotEdgeType.PROTEIN_TO_DISEASE,
-]
-
-
-uniprot_id_type = [
-     UniprotIDField.GENE_ENTREZ_ID,
-]
+# UniProt configuration
+uniprot_node_types = [getattr(UniprotNodeType, nt) for nt in config['uniprot']['node_types']]
+uniprot_node_fields = [getattr(UniprotNodeField, nf) for nf in config['uniprot']['node_fields']]
+uniprot_edge_types = [getattr(UniprotEdgeType, et) for et in config['uniprot']['edge_types']]
+uniprot_id_type = [getattr(UniprotIDField, idf) for idf in config['uniprot']['id_fields']]
 
 log_adapter_boundary("UniProt SwissProt", "start")
 try:
@@ -362,11 +301,11 @@ try:
     print("\n" + "="*60)
     print("Loading UniProt Keywords...")
     print("="*60)
-    
+
     keywords_adapter = UniprotKeywords(
-        json_path="/GenSIvePFS/users/data/UniProt/keywords_all_2025_12_25.json",
-        node_types=[KeywordNodeType.KEYWORD],
-        edge_types=[KeywordEdgeType.KEYWORD_HIERARCHY, KeywordEdgeType.KEYWORD_TO_GO],
+        json_path=config['data_paths']['uniprot_keywords_json'],
+        node_types=[getattr(KeywordNodeType, nt) for nt in config['keywords']['node_types']],
+        edge_types=[getattr(KeywordEdgeType, et) for et in config['keywords']['edge_types']],
         test_mode=TEST_MODE,
     )
     
@@ -578,8 +517,8 @@ finally:
 # pathway
 log_adapter_boundary("Pathway", "start")
 try:
-    # Limit to human only in test mode to avoid slow KEGG download for all organisms
-    kegg_organism = ORGANISM if not TEST_MODE else ["hsa"]
+    # Use config kegg_organism, or limit to human in test mode
+    kegg_organism = config['pathway']['kegg_organism'] if not TEST_MODE else ["hsa"]
     pathway_adapter = Pathway(
         drugbank_user=drugbank_user,
         drugbank_passwd=drugbank_passwd,
