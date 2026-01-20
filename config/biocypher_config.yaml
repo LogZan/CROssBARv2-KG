@@ -2,6 +2,7 @@
 biocypher:
 
   offline: true
+  log_directory: logs/biocypher-log
   head_ontology:
     url: ontology/biolink-model.owl.ttl
     root_node: entity

@@ -8,6 +8,21 @@ import os
 import tempfile
 from pypath.share import settings
 
+# Monkey-patch pypath_common to use logs subdirectory
+try:
+    import pypath_common._logger as _logger_module
+    _original_new_logger = _logger_module.new_logger
+
+    def _patched_new_logger(name, settings_obj, logdir=None, **kwargs):
+        # If logdir not specified, use logs/{name}_log instead of {name}_log
+        if logdir is None:
+            logdir = f'logs/{name}_log'
+        return _original_new_logger(name, settings_obj, logdir=logdir, **kwargs)
+
+    _logger_module.new_logger = _patched_new_logger
+except Exception:
+    pass  # If patching fails, continue with default behavior
+
 # Base cache directory
 PYPATH_CACHE_BASE = "/GenSIvePFS/users/data/pypath_cache"
 PYPATH_PICKLE_DIR = "/GenSIvePFS/users/data/pypath_cache/pickles"
@@ -104,19 +119,21 @@ def setup_pypath_cache():
     os.makedirs(PYPATH_CACHE_BASE, exist_ok=True)
     os.makedirs(PYPATH_PICKLE_DIR, exist_ok=True)
     os.makedirs(PYPATH_TEMP_DIR, exist_ok=True)
-    
+    os.makedirs('logs', exist_ok=True)
+
     # Create all category directories
     for category_dir in CACHE_DIRS.values():
         os.makedirs(category_dir, exist_ok=True)
-    
+
     # Set pypath settings (default to 'other' dir for uncategorized files, adapters will override)
     settings.setup(cachedir=CACHE_DIRS['other'])
     settings.setup(pickle_dir=PYPATH_PICKLE_DIR)
-    
-    # Also set TMPDIR environment variable for temp files
+
+    # Set environment variables for temp files and log directories
     os.environ['TMPDIR'] = PYPATH_TEMP_DIR
     os.environ['TEMP'] = PYPATH_TEMP_DIR
     os.environ['TMP'] = PYPATH_TEMP_DIR
-    
+    os.environ['PYPATH_LOG'] = 'logs'
+
     # Reinitialize tempfile to use new directory
     tempfile.tempdir = PYPATH_TEMP_DIR

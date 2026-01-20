@@ -1,8 +1,13 @@
+import os
 import sys
 import gc
 import yaml
 import ctypes
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
+
+# Setup timezone (UTC+8 for Asia/Shanghai)
+TZ = timezone(timedelta(hours=8))
 
 project_root = Path(__file__).resolve().parent.parent
 # Add parent directory to Python path
@@ -110,8 +115,27 @@ from bccb.tfgen_adapter import (
 
 from biocypher import BioCypher
 
+# dirs
+# Use a fixed latest directory for reproducible paths, but backup old runs if needed
+# For now, we use a single latest directory as requested
+timestamp = datetime.now(TZ).strftime("%Y%m%d%H%M%S")
+output_dir_path = str(project_root / "biocypher-out")
+
+# Helper for consistent logging
+def log_adapter_boundary(adapter_name: str, phase: str):
+    """Log adapter execution boundary."""
+    separator = "=" * 60
+    timestamp = datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
+    if phase == "start":
+        print(f"\n{separator}")
+        print(f"[{timestamp}] [START] {adapter_name} adapter")
+        print(f"{separator}")
+    else:
+        print(f"[{timestamp}] [END] {adapter_name} adapter")
+        print(f"{separator}\n")
+
 bc = BioCypher(biocypher_config_path= str(project_root / "config/biocypher_config.yaml"),
-               schema_config_path= str(project_root / "config/schema_config.yaml"),
+               schema_config_path= str(project_root / "config/schema_config.yaml")
 )
 
 # Whether to cache data by pypath for future usage
@@ -121,8 +145,8 @@ CACHE = True
 export_as_csv = True
 
 # Flag for test mode
-# TEST_MODE = True
-TEST_MODE = False
+TEST_MODE = True
+# TEST_MODE = False
 
 # Flag to dynamically update schema with discovered annotation/feature types
 # Set to True on first run to add new types, then set to False for subsequent runs
@@ -130,8 +154,13 @@ UPDATE_SCHEMA_DYNAMICALLY = False
 # UPDATE_SCHEMA_DYNAMICALLY = True
 
 # Flag for low memory mode
-# Set to True to enable memory optimization
-LOW_MEMORY_MODE = False
+# LOW_MEMORY_MODE = False
+LOW_MEMORY_MODE = True
+
+# Organism filter for adapters
+# Use "*" for all organisms, or specify NCBI taxonomy ID (e.g., 9606 for human)
+ORGANISM = "*"
+# ORGANISM = 9606  # Human only
 
 
 def update_schema_with_dynamic_types(schema_path: str, annotation_types: set, feature_types: set):
@@ -175,9 +204,18 @@ def update_schema_with_dynamic_types(schema_path: str, annotation_types: set, fe
             added_types.append(schema_key)
     
     if added_types:
-        # Write updated schema
+        # Write updated schema with blank lines between entries
+        yaml_str = yaml.dump(schema, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        lines = yaml_str.split('\n')
+        formatted_lines = []
+        for i, line in enumerate(lines):
+            if i > 0 and line and not line[0].isspace() and formatted_lines and formatted_lines[-1]:
+                formatted_lines.append('')
+            formatted_lines.append(line)
+
         with open(schema_path, 'w', encoding='utf-8') as f:
-            yaml.dump(schema, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            f.write('\n'.join(formatted_lines))
+
         print(f"Schema updated with {len(added_types)} new types:")
         for t in sorted(added_types):
             print(f"  + {t}")
@@ -186,8 +224,6 @@ def update_schema_with_dynamic_types(schema_path: str, annotation_types: set, fe
     
     return added_types
 
-# dirs
-output_dir_path = "/GenSIvePFS/users/clzeng/workspace/CROssBARv2-KG/biocypher-out"
 
 # user and passwd
 drugbank_user = "zengchuanlong23@mails.ucas.ac.cn"
@@ -247,54 +283,68 @@ uniprot_edge_types = [
      UniprotEdgeType.PROTEIN_TO_DISEASE,
 ]
 
+
 uniprot_id_type = [
      UniprotIDField.GENE_ENTREZ_ID,
 ]
 
+log_adapter_boundary("UniProt SwissProt", "start")
+try:
+    uniprot_adapter = UniprotSwissprot(
+            json_path="/GenSIvePFS/users/data/UniProt/UniProtKB_SwissProt/uniprotkb_reviewed_true_2025_11_04.json",
+            organism=ORGANISM,
+            node_types=uniprot_node_types,
+            node_fields=uniprot_node_fields,
+            edge_types=uniprot_edge_types,
+            id_fields=uniprot_id_type,
+            test_mode=TEST_MODE,
+        )
 
-uniprot_adapter = UniprotSwissprot(
-        json_path="/GenSIvePFS/users/data/UniProt/UniProtKB_SwissProt/uniprotkb_reviewed_true_2025_11_04.json",
-        organism="*",
-        node_types=uniprot_node_types,
-        node_fields=uniprot_node_fields,
-        edge_types=uniprot_edge_types,
-        id_fields=uniprot_id_type,
-        test_mode=TEST_MODE,
-    )
+    uniprot_adapter.download_uniprot_data(cache=CACHE, retries=6)
 
-uniprot_adapter.download_uniprot_data(cache=CACHE, retries=6)
+    # Optionally update schema with dynamically discovered types
+    if UPDATE_SCHEMA_DYNAMICALLY:
+        print("Updating schema with dynamically discovered annotation/feature types...")
+        schema_path = str(project_root / "config/schema_config.yaml")
+        annotation_types = set(uniprot_adapter.annotation_nodes.keys())
+        feature_types = set(uniprot_adapter.feature_nodes.keys())
+        update_schema_with_dynamic_types(schema_path, annotation_types, feature_types)
+        print("Schema updated. Please restart the script for changes to take effect.")
+        sys.exit(0)
 
-# Optionally update schema with dynamically discovered types
-if UPDATE_SCHEMA_DYNAMICALLY:
-    print("Updating schema with dynamically discovered annotation/feature types...")
-    schema_path = str(project_root / "config/schema_config.yaml")
-    annotation_types = set(uniprot_adapter.annotation_nodes.keys())
-    feature_types = set(uniprot_adapter.feature_nodes.keys())
-    update_schema_with_dynamic_types(schema_path, annotation_types, feature_types)
-    print("Schema updated. Please restart the script for changes to take effect.")
-    sys.exit(0)
+    uniprot_nodes = uniprot_adapter.get_nodes()
+    uniprot_edges = uniprot_adapter.get_edges()
 
-uniprot_nodes = uniprot_adapter.get_nodes()
-uniprot_edges = uniprot_adapter.get_edges()
+    # Write basic nodes and edges
+    bc.write_nodes(uniprot_nodes)
+    bc.write_edges(uniprot_edges)
 
-# Write basic nodes and edges
-bc.write_nodes(uniprot_nodes)
-bc.write_edges(uniprot_edges)
+    # Write extended nodes and edges from SwissProt
+    uniprot_extended_nodes = uniprot_adapter.get_all_extended_nodes()
+    uniprot_extended_edges = uniprot_adapter.get_all_extended_edges()
 
-# Write extended nodes and edges from SwissProt
-uniprot_extended_nodes = uniprot_adapter.get_all_extended_nodes()
-uniprot_extended_edges = uniprot_adapter.get_all_extended_edges()
+    bc.write_nodes(uniprot_extended_nodes)
+    bc.write_edges(uniprot_extended_edges)
 
-bc.write_nodes(uniprot_extended_nodes)
-bc.write_edges(uniprot_extended_edges)
-
-print(f"SwissProt extended nodes and edges written successfully.")
+    print(f"SwissProt extended nodes and edges written successfully.")
+    if export_as_csv:
+        uniprot_adapter.export_data_to_csv(path=output_dir_path,
+                                            node_data=uniprot_nodes,
+                                            edge_data=uniprot_edges)
+    print(f"SwissProt data exported to CSV successfully.")
+except Exception as e:
+    print(f"WARNING: UniProt SwissProt adapter failed: {e}")
+    import traceback
+    traceback.print_exc()
+finally:
+    log_adapter_boundary("UniProt SwissProt", "end")
 print(f"  Annotation types: {len(uniprot_adapter.annotation_nodes)}")
 print(f"  Feature types: {len(uniprot_adapter.feature_nodes)}")
 print(f"  Disease nodes: {len(uniprot_adapter.disease_nodes)}")
 print(f"  Proteins with keywords: {len(uniprot_adapter.protein_keywords)}")
 
 # UniProt Keywords (vocabulary with hierarchy and GO mappings)
+log_adapter_boundary("UniProt Keywords", "start")
 try:
     print("\n" + "="*60)
     print("Loading UniProt Keywords...")
@@ -329,21 +379,34 @@ finally:
         del keywords_adapter
     gc.collect()
     aggressive_memory_cleanup("UniProt Keywords")
+    log_adapter_boundary("UniProt Keywords", "end")
 
 # PPI
-ppi_adapter = PPI(organism=9606, 
-                  output_dir=output_dir_path,
-                  export_csv=export_as_csv,
-                  test_mode=TEST_MODE)
-
-ppi_adapter.download_ppi_data(cache=CACHE)
-
-ppi_adapter.process_ppi_data()
-
-bc.write_edges(ppi_adapter.get_ppi_edges())
+log_adapter_boundary("PPI", "start")
+try:
+    ppi_adapter = PPI(organism=ORGANISM, 
+                      output_dir=output_dir_path,
+                      export_csv=export_as_csv,
+                      test_mode=TEST_MODE)
+    
+    ppi_adapter.download_ppi_data(cache=CACHE)
+    
+    ppi_adapter.process_ppi_data()
+    
+    bc.write_edges(ppi_adapter.get_ppi_edges())
+except Exception as e:
+    print(f"WARNING: PPI adapter failed: {e}")
+    import traceback
+    traceback.print_exc()
+finally:
+    if 'ppi_adapter' in dir():
+        del ppi_adapter
+    aggressive_memory_cleanup("PPI")
+    log_adapter_boundary("PPI", "end")
 
 # protein domain
 # Note: pypath 0.16.28+ uses rescued data from OmniPath, currently only human (9606) available
+log_adapter_boundary("InterPro", "start")
 try:
     interpro_adapter = InterPro(
         organism=9606,  # Use human for now, rescued data only supports 9606
@@ -352,22 +415,25 @@ try:
 
     interpro_adapter.download_interpro_data(cache=CACHE)
 
-    if export_as_csv:
-        interpro_adapter.export_as_csv(path=output_dir_path)
-
     bc.write_nodes(interpro_adapter.get_interpro_nodes())
     bc.write_edges(interpro_adapter.get_interpro_edges())
+
+    if export_as_csv:
+        interpro_adapter.export_as_csv(path=output_dir_path)
 except Exception as e:
     print(f"WARNING: InterPro adapter failed: {e}")
     print("Skipping InterPro data, continuing with other adapters...")
 finally:
-    del interpro_adapter
+    if 'interpro_adapter' in dir():
+        del interpro_adapter
     aggressive_memory_cleanup("InterPro")
+    log_adapter_boundary("InterPro", "end")
 
 # gene ontology
+log_adapter_boundary("GO", "start")
 try:
     go_adapter = GO(
-        organism=9606, 
+        organism=ORGANISM,
         test_mode=TEST_MODE
     )
     go_adapter.download_go_data(cache=CACHE)
@@ -378,18 +444,21 @@ try:
 except Exception as e:
     print(f"WARNING: GO adapter failed: {e}")
 finally:
-    del go_adapter
+    if 'go_adapter' in dir():
+        del go_adapter
     aggressive_memory_cleanup("GO")
+    log_adapter_boundary("GO", "end")
 
 # drug - with memory optimization
+log_adapter_boundary("Drug", "start")
 try:
     # Exclude SELFORMER_EMBEDDING (requires external file path)
     drug_node_fields = [f for f in DrugNodeField if f != DrugNodeField.SELFORMER_EMBEDDING]
     drug_adapter = Drug(
-        drugbank_user=drugbank_user, 
+        drugbank_user=drugbank_user,
         drugbank_passwd=drugbank_passwd,
         node_fields=drug_node_fields,
-        export_csv=export_as_csv, 
+        export_csv=export_as_csv,
         output_dir=output_dir_path,
         test_mode=TEST_MODE,
         low_memory_mode=LOW_MEMORY_MODE
@@ -406,12 +475,15 @@ finally:
     if 'drug_adapter' in dir():
         del drug_adapter
     aggressive_memory_cleanup("Drug")
+    log_adapter_boundary("Drug", "end")
 
 
+
+log_adapter_boundary("Compound", "start")
 try:
     compound_adapter = Compound(
-        stitch_organism=9606,
-        export_csv=export_as_csv, 
+        stitch_organism=ORGANISM,
+        export_csv=export_as_csv,
         output_dir=output_dir_path,
         test_mode=TEST_MODE,
         low_memory_mode=True  # Enable memory optimization
@@ -428,15 +500,19 @@ finally:
     if 'compound_adapter' in dir():
         del compound_adapter
     aggressive_memory_cleanup("Compound")
+    log_adapter_boundary("Compound", "end")
 
 
+
+log_adapter_boundary("Orthology", "start")
 try:
     orthology_adapter = Orthology(
-        export_csv=export_as_csv, 
+        export_csv=export_as_csv,
         output_dir=output_dir_path,
         test_mode=TEST_MODE
     )
     orthology_adapter.download_orthology_data(cache=CACHE)
+    # Note: Orthology only has edges, no nodes
     bc.write_edges(orthology_adapter.get_orthology_edges())
 except Exception as e:
     print(f"WARNING: Orthology adapter failed: {e}")
@@ -444,13 +520,15 @@ finally:
     if 'orthology_adapter' in dir():
         del orthology_adapter
     aggressive_memory_cleanup("Orthology")
+    log_adapter_boundary("Orthology", "end")
 
 # disease
+log_adapter_boundary("Disease", "start")
 try:
     disease_adapter = Disease(
-        drugbank_user=drugbank_user, 
+        drugbank_user=drugbank_user,
         drugbank_passwd=drugbank_passwd,
-        export_csv=export_as_csv, 
+        export_csv=export_as_csv,
         output_dir=output_dir_path,
         test_mode=TEST_MODE
     )
@@ -463,11 +541,13 @@ finally:
     if 'disease_adapter' in dir():
         del disease_adapter
     aggressive_memory_cleanup("Disease")
+    log_adapter_boundary("Disease", "end")
 
 # phenotype
+log_adapter_boundary("Phenotype", "start")
 try:
     phenotype_adapter = HPO(
-        export_csv=export_as_csv, 
+        export_csv=export_as_csv,
         output_dir=output_dir_path,
         test_mode=TEST_MODE
     )
@@ -480,13 +560,15 @@ finally:
     if 'phenotype_adapter' in dir():
         del phenotype_adapter
     aggressive_memory_cleanup("Phenotype")
+    log_adapter_boundary("Phenotype", "end")
 
 # pathway
+log_adapter_boundary("Pathway", "start")
 try:
     # Limit to human only in test mode to avoid slow KEGG download for all organisms
     kegg_organism = ["hsa"] if TEST_MODE else None
     pathway_adapter = Pathway(
-        drugbank_user=drugbank_user, 
+        drugbank_user=drugbank_user,
         drugbank_passwd=drugbank_passwd,
         export_csv=export_as_csv,
         output_dir=output_dir_path,
@@ -504,9 +586,11 @@ finally:
     if 'pathway_adapter' in dir():
         del pathway_adapter
     aggressive_memory_cleanup("Pathway")
+    log_adapter_boundary("Pathway", "end")
 
 
 # side effect
+log_adapter_boundary("Side Effect", "start")
 try:
     side_effect_adapter = SideEffect(
         drugbank_user=drugbank_user,
@@ -526,8 +610,10 @@ finally:
     if 'side_effect_adapter' in dir():
         del side_effect_adapter
     print("Memory cleaned up after Side effect adapter")
+    log_adapter_boundary("Side Effect", "end")
 
 # ec numbers
+log_adapter_boundary("EC", "start")
 try:
     ec_adapter = EC(
         export_csv=export_as_csv,
@@ -545,8 +631,10 @@ finally:
     if 'ec_adapter' in dir():
         del ec_adapter
     aggressive_memory_cleanup("EC")
+    log_adapter_boundary("EC", "end")
 
 # tf-gen
+log_adapter_boundary("TFGene", "start")
 try:
     tfgene_adapter = TFGene(
         export_csv=export_as_csv,
@@ -563,6 +651,7 @@ finally:
     if 'tfgene_adapter' in dir():
         del tfgene_adapter
     aggressive_memory_cleanup("TFGene")
+    log_adapter_boundary("TFGene", "end")
 
 
 # Write import call and other post-processing
