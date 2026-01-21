@@ -249,6 +249,7 @@ class Drug:
         self.add_prefix = model["add_prefix"]
         self.export_csv = model["export_csv"]
         self.output_dir = model["output_dir"]
+        self.test_mode = model["test_mode"]
 
         # Lazy load swissprots only when needed (memory optimization)
         self._swissprots = None

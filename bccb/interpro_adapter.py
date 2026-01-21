@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import os
+import json
+import hashlib
+import collections
 import h5py
 import pandas as pd
 import numpy as np
 import gc
+import requests
 
 from pypath.share import curl, settings
 from pypath.inputs import interpro
@@ -22,7 +26,6 @@ from pydantic import BaseModel, DirectoryPath, FilePath, validate_call
 from enum import Enum, EnumMeta
 
 from . import cache_config
-from . import interpro_streaming
 cache_config.setup_pypath_cache()
 
 logger.debug(f"Loading module {__name__}.")
@@ -166,6 +169,7 @@ class InterPro:
             None if model["organism"] in ("*", None) else model["organism"]
         )
         self.add_prefix = model["add_prefix"]
+        self.test_mode = model["test_mode"]
 
         # set node and edge fields
         self.set_node_and_edge_fields(
@@ -204,57 +208,137 @@ class InterPro:
             if not cache:
                 stack.enter_context(curl.cache_off())
 
-            self.download_domain_node_data(dom2vec_embedding_path=dom2vec_embedding_path, cache=cache)
+            self.download_domain_node_data(
+                dom2vec_embedding_path=dom2vec_embedding_path,
+                cache=cache,
+            )
             self.download_domain_edge_data(cache=cache)
 
     @validate_call
-    def download_domain_node_data(self, dom2vec_embedding_path: FilePath | None = None, 
-                                  use_streaming: bool = True, cache: bool = False) -> None:
+    def download_domain_node_data(self, dom2vec_embedding_path: FilePath | None = None,
+                                  cache: bool = False) -> None:
         """
-        Downloads domain node data from Interpro
-        
+        Downloads domain node data from InterPro API (reviewed proteins).
+
         Args:
             dom2vec_embedding_path: Path to dom2vec embedding file
-            use_streaming: If True, use memory-efficient streaming mode
+            cache: If True, uses cached data
         """
 
-        logger.debug("Started downloading InterPro domain data")
+        logger.info("Downloading InterPro domain data from InterPro API...")
         t0 = time()
 
-        if use_streaming:
-            # Use streaming mode to avoid memory overflow
-            # Don't load all entries into memory at once
-            logger.info("Using streaming mode for InterPro data (memory-efficient)")
-            self._use_streaming = True
-            
-            # Build xrefs dictionaries incrementally
-            logger.info("Building structural xrefs dictionary...")
-            self.interpro_structural_xrefs = interpro_streaming.build_xrefs_dict(
-                db_type="structural",
-                early_stopping=self.early_stopping
-            )
-            gc.collect()  # Force garbage collection
-            
-            logger.info("Building external xrefs dictionary...")
-            self.interpro_external_xrefs = interpro_streaming.build_xrefs_dict(
-                db_type="external", 
-                early_stopping=self.early_stopping
-            )
-            gc.collect()
-            
-        else:
-            # Original mode - loads all data into memory
-            self._use_streaming = False
-            self.interpro_entries = (
-                interpro.interpro_entries()
-            )  # returns a list of namedtuples
-            self.interpro_structural_xrefs = interpro.interpro_xrefs(
-                db_type="structural"
-            )
-            self.interpro_external_xrefs = interpro.interpro_xrefs(
-                db_type="external"
-            )
+        # Initialize data structures
+        self.interpro_entries = {}  # entry_id -> entry metadata
+        self.protein_domains = {}   # protein_id -> list of domains with locations
+        # No xrefs available from the protein/entry API; keep empty dicts
+        self.interpro_external_xrefs = {}
+        self.interpro_structural_xrefs = {}
 
+        # Step 1: Get list of reviewed proteins
+        logger.info("Fetching reviewed protein list...")
+        protein_list = []
+        page_size = 100
+        protein_url = (
+            "https://www.ebi.ac.uk/interpro/api/protein/reviewed/taxonomy/uniprot/"
+            f"?page_size={page_size}"
+        )
+
+        # Set protein limit based on test mode
+        max_proteins = 100 if self.test_mode else None
+
+        cache_dir = cache_config.get_cache_dir("interpro")
+        tax_label = (
+            str(self.organism)
+            if self.organism not in (None, "*")
+            else "all"
+        )
+
+        with tqdm(desc="Fetching protein list", unit="page") as pbar:
+            while protein_url and (max_proteins is None or len(protein_list) < max_proteins):
+                try:
+                    data = self._fetch_json(
+                        protein_url,
+                        cache=cache,
+                        cache_dir=cache_dir,
+                        tax_label=tax_label,
+                    )
+
+                    for protein in data.get('results', []):
+                        protein_acc = protein.get('metadata', {}).get('accession')
+                        if protein_acc:
+                            protein_list.append(protein_acc.upper())
+                            if max_proteins and len(protein_list) >= max_proteins:
+                                break
+
+                    protein_url = data.get('next')
+                    pbar.update(1)
+                    pbar.set_postfix({'proteins': len(protein_list)})
+
+                except Exception as e:
+                    logger.error(f"Error fetching protein list: {e}")
+                    break
+
+        logger.info(f"Fetched {len(protein_list)} proteins")
+
+        # Step 2: For each protein, get its InterPro entries
+        logger.info("Fetching domain mappings for proteins...")
+
+        with tqdm(total=len(protein_list), desc="Fetching protein domains", unit="protein") as pbar:
+            for protein_id in protein_list:
+                try:
+                    url = f"https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/reviewed/{protein_id}/"
+                    data = self._fetch_json(
+                        url,
+                        cache=cache,
+                        cache_dir=cache_dir,
+                        tax_label=tax_label,
+                    )
+
+                    # Process entries for this protein
+                    for entry in data.get('results', []):
+                        entry_metadata = entry.get('metadata', {})
+                        entry_id = entry_metadata.get('accession')
+
+                        if not entry_id:
+                            continue
+
+                        # Store entry metadata if not already stored
+                        if entry_id not in self.interpro_entries:
+                            self.interpro_entries[entry_id] = {
+                                'name': entry_metadata.get('name'),
+                                'type': entry_metadata.get('type'),
+                                'member_databases': entry_metadata.get('member_databases', {})
+                            }
+
+                        # Get domain locations for this protein
+                        for protein_data in entry.get('proteins', []):
+                            if protein_data.get('accession', '').upper() == protein_id:
+                                for location in protein_data.get('entry_protein_locations', []):
+                                    for fragment in location.get('fragments', []):
+                                        domain_info = {
+                                            'entry_id': entry_id,
+                                            'entry_name': entry_metadata.get('name'),
+                                            'entry_type': entry_metadata.get('type'),
+                                            'start': fragment.get('start'),
+                                            'end': fragment.get('end')
+                                        }
+
+                                        if protein_id not in self.protein_domains:
+                                            self.protein_domains[protein_id] = []
+                                        self.protein_domains[protein_id].append(domain_info)
+
+                    pbar.update(1)
+
+                except Exception as e:
+                    logger.warning(f"Error fetching domains for {protein_id}: {e}")
+                    pbar.update(1)
+                    continue
+
+        logger.info(f"Downloaded {len(self.interpro_entries)} InterPro entries")
+        logger.info(f"Mapped {len(self.protein_domains)} proteins to domains")
+
+        # Load embeddings if requested
         if InterProNodeField.DOM2VEC_EMBEDDING.value in self.node_fields and dom2vec_embedding_path is not None:
             self.retrieve_dom2vec_embeddings(dom2vec_embedding_path=dom2vec_embedding_path)
 
@@ -264,40 +348,57 @@ class InterPro:
             f"InterPro domain data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
+    def _fetch_json(self, url: str, cache: bool, cache_dir: str, tax_label: str | None = None) -> dict:
+        """Fetch JSON with optional file cache under the InterPro cache dir."""
+        cache_root = os.path.join(cache_dir, "interpro_api")
+        os.makedirs(cache_root, exist_ok=True)
+        cache_key = hashlib.md5(url.encode("utf-8")).hexdigest()
+        label = tax_label if tax_label else "all"
+        cache_path = os.path.join(cache_root, f"{cache_key}-{label}-interpro.json")
+
+        if cache and os.path.exists(cache_path):
+            with open(cache_path, "r", encoding="utf-8") as fh:
+                return json.load(fh)
+
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        if cache:
+            with open(cache_path, "w", encoding="utf-8") as fh:
+                json.dump(data, fh)
+
+        return data
+
     def download_domain_edge_data(self, cache: bool = False) -> None:
         """
-        Downloads Uniprot annotation data from Interpro.
-        
-        Note: As of pypath 0.16.28, the new interpro_annotations() function uses
-        a rescued data source from OmniPath. Currently only human (9606) data
-        is available. For other organisms or all organisms, this will fall back
-        to human data with a warning.
+        Builds protein-domain annotations from InterPro API results.
         """
 
         logger.debug("Started downloading InterPro annotation data")
         t0 = time()
 
-        # New pypath version uses rescued data source which requires specific tax_id
-        # Currently only human (9606) is available
-        if self.organism and self.organism != "*":
-            tax_id = self.organism
-        else:
-            # Default to human if no organism specified or all organisms requested
-            logger.warning(
-                "InterPro rescued data currently only supports human (9606). "
-                "Using human data. For other organisms, the original InterPro API "
-                "may need to be restored when available."
-            )
-            tax_id = 9606
-
-        try:
-            # New pypath 0.16.28+ API - no longer uses page_size or reviewed params
-            self.interpro_annotations = interpro.interpro_annotations(
-                tax_id=tax_id,
-            )
-        except Exception as e:
-            logger.error(f"Failed to download InterPro annotations: {e}")
+        if not hasattr(self, "protein_domains") or not self.protein_domains:
+            logger.warning("No protein domain data found; cannot build edges.")
             self.interpro_annotations = {}
+        else:
+            InterproAnnotation = collections.namedtuple(
+                "InterproAnnotation", ("interpro_id", "start", "end")
+            )
+            annotations = {}
+            for protein_id, domains in self.protein_domains.items():
+                ann_list = []
+                for domain in domains:
+                    ann_list.append(
+                        InterproAnnotation(
+                            interpro_id=domain.get("entry_id"),
+                            start=domain.get("start"),
+                            end=domain.get("end"),
+                        )
+                    )
+                if ann_list:
+                    annotations[protein_id] = ann_list
+            self.interpro_annotations = annotations
 
         t1 = time()
         action = "retrieved" if cache else "downloaded"
@@ -324,7 +425,7 @@ class InterPro:
         """
 
         # Check if we need to download data first
-        if not hasattr(self, "_use_streaming"):
+        if not getattr(self, "interpro_entries", None):
             self.download_domain_node_data()
 
         # create list of nodes
@@ -342,13 +443,35 @@ class InterPro:
         # set counter for early stopping
         counter = 0
         
-        # Choose data source based on streaming mode
-        if getattr(self, '_use_streaming', False):
-            # Use streaming generator
-            entries_source = interpro_streaming.interpro_entries_streaming(
-                early_stopping=self.early_stopping
+        # Choose data source based on API metadata
+        if hasattr(self, "interpro_entries") and isinstance(self.interpro_entries, dict):
+            InterproEntry = collections.namedtuple(
+                "InterproEntry",
+                (
+                    "interpro_id",
+                    "protein_count",
+                    "name",
+                    "type",
+                    "publications",
+                    "parent_list",
+                    "child_list",
+                    "member_list",
+                ),
             )
-            logger.info("Processing InterPro entries in streaming mode...")
+            entries_source = (
+                InterproEntry(
+                    interpro_id=entry_id,
+                    protein_count=None,
+                    name=meta.get("name"),
+                    type=meta.get("type"),
+                    publications=None,
+                    parent_list=None,
+                    child_list=None,
+                    member_list=meta.get("member_databases", {}) or {},
+                )
+                for entry_id, meta in self.interpro_entries.items()
+            )
+            logger.info("Processing InterPro entries from API metadata...")
         else:
             # Use pre-loaded data
             entries_source = self.interpro_entries
@@ -384,7 +507,7 @@ class InterPro:
 
             # get external InterPro attributes
             for element in external_attributes:
-                external_xrefs = self.interpro_external_xrefs.get(entry.interpro_id, {})
+                external_xrefs = getattr(self, "interpro_external_xrefs", {}).get(entry.interpro_id, {})
                 if element in self.node_fields and external_xrefs.get(element):
                     props[element.replace(" ", "_").lower()] = (
                         self.check_length(external_xrefs.get(element))
@@ -392,7 +515,7 @@ class InterPro:
 
             # get structural InterPro attributes
             for element in structural_attributes:
-                structural_xrefs = self.interpro_structural_xrefs.get(entry.interpro_id, {})
+                structural_xrefs = getattr(self, "interpro_structural_xrefs", {}).get(entry.interpro_id, {})
                 if element in self.node_fields and structural_xrefs.get(element):
                     props[element.replace(" ", "_").lower()] = (
                         self.check_length(structural_xrefs.get(element))
@@ -412,10 +535,6 @@ class InterPro:
             if self.early_stopping and counter >= self.early_stopping:
                 break
             
-            # Periodically trigger garbage collection in streaming mode
-            if getattr(self, '_use_streaming', False) and counter % 5000 == 0:
-                gc.collect()
-
         t1 = time()
         logger.info(f"InterPro nodes created in {round((t1-t0) / 60, 2)} mins")
 

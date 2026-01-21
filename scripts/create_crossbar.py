@@ -139,6 +139,10 @@ anc2vec_go_embedding_path = f"{embeddings_dir}/{config['embeddings']['anc2vec_go
 cada_phenotype_embedding_path = f"{embeddings_dir}/{config['embeddings']['cada_phenotype']}"
 dom2vec_domain_embedding_path = f"{embeddings_dir}/{config['embeddings']['dom2vec_domain']}"
 
+# MalaCards file paths
+malacards_json_path = f"{malacards_dir_path}/{config['malacards']['diseases']}"
+malacards_related_diseases_json_path = f"{malacards_dir_path}/{config['malacards']['related_diseases']}"
+
 
 # Helper for consistent logging
 def log_adapter_boundary(adapter_name: str, phase: str):
@@ -483,8 +487,8 @@ try:
     )
     disease_adapter.download_disease_data(cache=CACHE,
         doc2vec_embedding_path=doc2vec_disease_embedding_path if USE_EMBEDDINGS else None,
-        malacards_dir_path=malacards_dir_path,
-        malacards_related_diseases_json_path=malacards_dir_path
+        malacards_json_path=malacards_json_path,
+        malacards_related_diseases_json_path=malacards_related_diseases_json_path
         )
     bc.write_nodes(disease_adapter.get_nodes())
     bc.write_edges(disease_adapter.get_edges())
@@ -504,7 +508,7 @@ try:
         output_dir=output_dir_path,
         test_mode=TEST_MODE
     )
-    phenotype_adapter.download_hpo_data(cache=CACHE, cache_dir_path=embeddings_dir, cada_embedding_path=cada_phenotype_embedding_path if USE_EMBEDDINGS else None)
+    phenotype_adapter.download_hpo_data(cache=CACHE, cada_embedding_path=cada_phenotype_embedding_path if USE_EMBEDDINGS else None)
     bc.write_nodes(phenotype_adapter.get_nodes())
     bc.write_edges(phenotype_adapter.get_edges())
 except Exception as e:

@@ -211,16 +211,34 @@ class Orthology:
         self.entry_name_to_uniprot = uniprot.uniprot_data(
             field="id", reviewed=True, organism="*"
         )
-        self.entry_name_to_uniprot = {
-            v: k for k, v in self.entry_name_to_uniprot.items()
-        }
+        if isinstance(self.entry_name_to_uniprot, list):
+            if not self.entry_name_to_uniprot:
+                self.entry_name_to_uniprot = {}
+            else:
+                logger.warning(f"uniprot_data returned list for field='id'. Using empty mapping.")
+                self.entry_name_to_uniprot = {}
+
+        if isinstance(self.entry_name_to_uniprot, dict):
+            self.entry_name_to_uniprot = {
+                v: k for k, v in self.entry_name_to_uniprot.items()
+            }
+        else:
+            self.entry_name_to_uniprot = {}
 
         uniprot_to_entrez = uniprot.uniprot_data(
             field="xref_geneid", reviewed=True, organism="*"
         )
+        if isinstance(uniprot_to_entrez, list):
+            if not uniprot_to_entrez:
+                uniprot_to_entrez = {}
+            else:
+                logger.warning(f"uniprot_data returned list for field='xref_geneid'. Using empty mapping.")
+                uniprot_to_entrez = {}
+
         self.uniprot_to_entrez = {}
-        for k, v in uniprot_to_entrez.items():
-            self.uniprot_to_entrez[k] = v.strip(";").split(";")[0]
+        if isinstance(uniprot_to_entrez, dict):
+            for k, v in uniprot_to_entrez.items():
+                self.uniprot_to_entrez[k] = v.strip(";").split(";")[0]
 
         logger.debug("Started downloading OMA orthology data")
         t0 = time()
@@ -317,11 +335,19 @@ class Orthology:
         uniprot_to_entrez = uniprot.uniprot_data(
             field="xref_geneid", reviewed=True, organism="*"
         )
+        if isinstance(uniprot_to_entrez, list):
+            if not uniprot_to_entrez:
+                uniprot_to_entrez = {}
+            else:
+                logger.warning(f"uniprot_data returned list for field='xref_geneid'. Using empty mapping.")
+                uniprot_to_entrez = {}
+
         self.entrez_to_uniprot = {}
-        for k, v in uniprot_to_entrez.items():
-            for entrez in v.strip(";").split(";"):
-                if entrez:
-                    self.entrez_to_uniprot[entrez] = k
+        if isinstance(uniprot_to_entrez, dict):
+            for k, v in uniprot_to_entrez.items():
+                for entrez in v.strip(";").split(";"):
+                    if entrez:
+                        self.entrez_to_uniprot[entrez] = k
 
         self.pharos_orthology_init = pharos.pharos_targets(orthologs=True)
 

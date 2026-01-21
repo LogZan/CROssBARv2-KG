@@ -698,7 +698,7 @@ protein to keyword association:
 keyword hierarchical association:
   is_a: association
   represented_as: edge
-  label_as_edge: keyword_is_a_keyword
+  label_as_edge: keyword_child_of_keyword
   source: uniprot keyword
   target: uniprot keyword
   label_in_input: keyword_is_a_keyword

@@ -30,6 +30,11 @@ embeddings:
   cada_phenotype: 'cada_phenotype_embedding.h5'
   dom2vec_domain: 'dom2vec_domain_embedding.h5'
 
+# MalaCards file names (relative to malacards_dir)
+malacards:
+  diseases: 'MalaCards.json'
+  related_diseases: 'MalaCardsRelatedDiseases.json'
+
 # DrugBank credentials
 drugbank:
   user: 'zengchuanlong23@mails.ucas.ac.cn'

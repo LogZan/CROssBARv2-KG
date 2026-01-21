@@ -135,6 +135,7 @@ class Compound:
         self.add_prefix = model["add_prefix"]
         self.export_csv = model["export_csv"]
         self.output_dir = model["output_dir"]
+        self.test_mode = model["test_mode"]
 
         # set node fields
         self.set_node_fields(node_fields=model["node_fields"])

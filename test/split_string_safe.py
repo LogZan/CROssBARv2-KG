@@ -45,7 +45,7 @@ def get_memory_usage():
 DEFAULT_INPUT = "/GenSIvePFS/users/data/STRING/protein.links.detailed.v12.0.txt.gz"
 DEFAULT_OUTPUT = "/GenSIvePFS/users/data/pypath_cache/string"
 STRING_VERSION = "v12.0"
-CHUNK_SIZE = 10_000_000  # Lines per chunk
+CHUNK_SIZE = 1_000_000   # Lines per chunk (default; keep memory bounded)
 MAX_OPEN_FILES = 1000    # Maximum open file handles
 BUFFER_SIZE = 10000      # Lines to buffer per species before writing
 
@@ -74,8 +74,8 @@ def get_tax_id(protein_id: str) -> str:
 def check_pigz():
     """Check if pigz is available."""
     try:
-        subprocess.run(['pigz', '--version'], capture_output=True, text=True)
-        return True
+        result = subprocess.run(['pigz', '--version'], capture_output=True, text=True)
+        return result.returncode == 0
     except FileNotFoundError:
         return False
 
@@ -95,29 +95,37 @@ class LRUFileHandleCache:
         self.buffers = {}  # tax_id -> list of lines (small buffer)
         self.buffer_size = buffer_size
         
+    def _open_handle(self, tax_id: str):
+        """Open a handle in append mode, writing header if file is new/empty."""
+        file_hash = generate_pypath_hash(tax_id)
+        filename = f"{file_hash}-{tax_id}.protein.links.detailed.{STRING_VERSION}.txt.gz"
+        filepath = self.output_dir / filename
+
+        is_new = (not filepath.exists()) or filepath.stat().st_size == 0
+        handle = gzip.open(str(filepath), 'at', encoding='utf-8', compresslevel=1)
+        if is_new:
+            handle.write(self.header + '\n')
+        return handle
+
     def get_handle(self, tax_id: str):
         """Get or create file handle for a tax_id."""
         if tax_id in self.handles:
             self.handles.move_to_end(tax_id)
             return self.handles[tax_id]
         
-        file_hash = generate_pypath_hash(tax_id)
-        filename = f"{file_hash}-{tax_id}.protein.links.detailed.{STRING_VERSION}.txt.gz"
-        filepath = self.output_dir / filename
-        
         # Close oldest handle if at limit
         if len(self.handles) >= self.max_handles:
             oldest_tax_id, oldest_handle = self.handles.popitem(last=False)
-            self._flush_buffer(oldest_tax_id)
+            self._flush_buffer(oldest_tax_id, handle=oldest_handle, allow_open=False)
             oldest_handle.close()
             if oldest_tax_id in self.buffers:
                 del self.buffers[oldest_tax_id]
         
-        # Open new handle with fast compression
-        handle = gzip.open(str(filepath), 'wt', encoding='utf-8', compresslevel=1)
-        handle.write(self.header + '\n')
+        # Open new handle with fast compression (append; avoid truncation)
+        handle = self._open_handle(tax_id)
         self.handles[tax_id] = handle
-        self.line_counts[tax_id] = 0
+        if tax_id not in self.line_counts:
+            self.line_counts[tax_id] = 0
         self.buffers[tax_id] = []
         
         return handle
@@ -134,10 +142,17 @@ class LRUFileHandleCache:
         if len(self.buffers[tax_id]) >= self.buffer_size:
             self._flush_buffer(tax_id)
             
-    def _flush_buffer(self, tax_id: str):
+    def _flush_buffer(self, tax_id: str, handle=None, allow_open: bool = True):
         """Write buffered lines to file and FREE memory."""
         if tax_id in self.buffers and self.buffers[tax_id]:
-            handle = self.get_handle(tax_id)
+            if handle is None:
+                if tax_id in self.handles:
+                    handle = self.handles[tax_id]
+                elif allow_open:
+                    handle = self._open_handle(tax_id)
+                    self.handles[tax_id] = handle
+                else:
+                    return
             handle.write(''.join(self.buffers[tax_id]))
             self.buffers[tax_id] = []  # Free memory!
     
@@ -150,10 +165,18 @@ class LRUFileHandleCache:
         """Flush all buffers and close all handles."""
         for tax_id in list(self.buffers.keys()):
             self._flush_buffer(tax_id)
-            
-        for handle in self.handles.values():
+
+        for tax_id, handle in list(self.handles.items()):
             try:
                 handle.close()
+                # Delete empty files (only header, no data)
+                if self.line_counts.get(tax_id, 0) == 0:
+                    file_hash = generate_pypath_hash(tax_id)
+                    filename = f"{file_hash}-{tax_id}.protein.links.detailed.{STRING_VERSION}.txt.gz"
+                    filepath = self.output_dir / filename
+                    if filepath.exists():
+                        filepath.unlink()
+                        logger.debug(f"Deleted empty file for tax_id {tax_id}")
             except:
                 pass
         self.handles.clear()
@@ -193,13 +216,41 @@ def process_chunk(args):
     return chunk_id, dict(grouped), processed, skipped
 
 
+def iter_chunks(lines_iter, chunk_size: int):
+    """Yield lists of lines with a bounded size."""
+    chunk = []
+    for line in lines_iter:
+        chunk.append(line)
+        if len(chunk) >= chunk_size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
+
+
+def is_complete_file(path: Path) -> bool:
+    """Return True if gz file has at least header + 1 data line."""
+    if not path.exists():
+        return False
+    try:
+        with gzip.open(str(path), 'rt', encoding='utf-8') as fh:
+            header = fh.readline()
+            if not header:
+                return False
+            data_line = fh.readline()
+            return bool(data_line)
+    except Exception:
+        return False
+
+
 def split_string_safe(
     input_file: str,
     output_dir: str,
     workers: int = None,
     skip_existing: bool = True,
     max_handles: int = MAX_OPEN_FILES,
-    start_line: int = 0
+    start_line: int = 0,
+    chunk_size: int = CHUNK_SIZE
 ):
     """
     Split STRING file using SAFE mode:
@@ -227,13 +278,20 @@ def split_string_safe(
             parts = f.name.split('-', 1)
             if len(parts) == 2:
                 tax_part = parts[1].split('.')[0]
-                existing_tax_ids.add(tax_part)
+                if is_complete_file(f):
+                    existing_tax_ids.add(tax_part)
+                else:
+                    try:
+                        f.unlink()
+                        logger.warning(f"Removed incomplete file: {f.name}")
+                    except Exception:
+                        logger.warning(f"Could not remove incomplete file: {f.name}")
         logger.info(f"Total species to skip: {len(existing_tax_ids)}")
 
     logger.info(f"Input: {input_file}")
     logger.info(f"Output: {output_dir}")
     logger.info(f"Workers: {workers}")
-    logger.info(f"Chunk size: {CHUNK_SIZE:,} lines")
+    logger.info(f"Chunk size: {chunk_size:,} lines")
     logger.info(f"Max open files: {max_handles}")
     logger.info(f"Mode: SAFE (streaming writes, NO OOM risk)")
     if start_line > 0:
@@ -245,13 +303,17 @@ def split_string_safe(
 
     # Open input with pigz or Python gzip
     if has_pigz:
-        proc = subprocess.Popen(
-            ['pigz', '-dc', '-p', str(min(workers, 16)), input_file],
-            stdout=subprocess.PIPE,
-            bufsize=1024*1024*256
-        )
-        lines_iter = (line.decode('utf-8') for line in proc.stdout)
-    else:
+        try:
+            proc = subprocess.Popen(
+                ['pigz', '-dc', '-p', str(min(workers, 16)), input_file],
+                stdout=subprocess.PIPE,
+                bufsize=1024*1024*256
+            )
+            lines_iter = (line.decode('utf-8') for line in proc.stdout)
+        except Exception as e:
+            logger.warning(f"pigz failed ({e}); falling back to Python gzip")
+            has_pigz = False
+    if not has_pigz:
         f = gzip.open(input_file, 'rt', encoding='utf-8')
         lines_iter = iter(f)
 
@@ -267,13 +329,19 @@ def split_string_safe(
         skipped_so_far = 0
         chunk_size_ff = 10_000_000
         
+        eof_reached = False
         while skipped_so_far < start_line:
             remaining = start_line - skipped_so_far
             current_chunk = min(remaining, chunk_size_ff)
             
             # Consume lines efficiently
+            consumed = 0
             for _ in islice(lines_iter, current_chunk):
-                pass
+                consumed += 1
+            if consumed < current_chunk:
+                eof_reached = True
+                skipped_so_far += consumed
+                break
             
             skipped_so_far += current_chunk
             
@@ -290,6 +358,19 @@ def split_string_safe(
                 ff_last_log = time()
         
         ff_time = time() - ff_start
+        if eof_reached and skipped_so_far < start_line:
+            logger.warning(
+                f"Reached EOF at line {skipped_so_far:,} before start_line {start_line:,}"
+            )
+            # Close input and exit early
+            if has_pigz:
+                proc.wait()
+            else:
+                try:
+                    f.close()
+                except Exception:
+                    pass
+            return
         logger.info(f"Fast-forward complete in {ff_time/60:.1f} min")
 
     # Initialize LRU file handle cache - KEY for memory efficiency
@@ -305,76 +386,34 @@ def split_string_safe(
 
     try:
         with Pool(workers) as pool:
-            chunk_lines = []
-            chunk_id = 0
-            pending_results = []
-            
-            for line in lines_iter:
-                chunk_lines.append(line)
-                
-                if len(chunk_lines) >= CHUNK_SIZE:
-                    # Submit chunk for parallel processing
-                    result = pool.apply_async(
-                        process_chunk,
-                        [(chunk_lines, chunk_id, existing_tax_ids)]
-                    )
-                    pending_results.append(result)
-                    chunk_lines = []
-                    chunk_id += 1
-                    
-                    # Process completed results immediately - KEY: write to disk, free memory
-                    new_pending = []
-                    for r in pending_results:
-                        if r.ready():
-                            cid, grouped, processed, skipped = r.get()
-                            
-                            # Write to disk immediately via LRU cache
-                            for tax_id, lines in grouped.items():
-                                cache.write_lines(tax_id, lines)
-                                new_species.add(tax_id)
-                            
-                            total_lines += processed
-                            total_skipped += skipped
-                            chunks_processed += 1
-                        else:
-                            new_pending.append(r)
-                    pending_results = new_pending
-                    
-                    # Periodically flush to ensure memory is freed
-                    if chunks_processed % 10 == 0:
-                        cache.flush_all()
-                    
-                    # Log progress
-                    if time() - last_log_time >= 30:
-                        mem_usage = get_memory_usage()
-                        stats = cache.get_stats()
-                        logger.info(
-                            f"Chunks: {chunks_processed}, Lines: {total_lines/1e6:.1f}M, "
-                            f"Skipped: {total_skipped/1e6:.1f}M, "
-                            f"Species: {len(new_species)}, "
-                            f"Written: {stats['total_lines']/1e6:.1f}M, "
-                            f"Memory: {mem_usage}"
-                        )
-                        sys.stdout.flush()
-                        last_log_time = time()
-            
-            # Process remaining chunk
-            if chunk_lines:
-                result = pool.apply_async(
-                    process_chunk,
-                    [(chunk_lines, chunk_id, existing_tax_ids)]
-                )
-                pending_results.append(result)
-            
-            # Wait for all results
-            for r in pending_results:
-                cid, grouped, processed, skipped = r.get()
+            for cid, grouped, processed, skipped in pool.imap_unordered(
+                process_chunk,
+                ((chunk, idx, existing_tax_ids)
+                 for idx, chunk in enumerate(iter_chunks(lines_iter, chunk_size))),
+                chunksize=1
+            ):
                 for tax_id, lines in grouped.items():
                     cache.write_lines(tax_id, lines)
                     new_species.add(tax_id)
                 total_lines += processed
                 total_skipped += skipped
                 chunks_processed += 1
+
+                if chunks_processed % 10 == 0:
+                    cache.flush_all()
+
+                if time() - last_log_time >= 30:
+                    mem_usage = get_memory_usage()
+                    stats = cache.get_stats()
+                    logger.info(
+                        f"Chunks: {chunks_processed}, Lines: {total_lines/1e6:.1f}M, "
+                        f"Skipped: {total_skipped/1e6:.1f}M, "
+                        f"Species: {len(new_species)}, "
+                        f"Written: {stats['total_lines']/1e6:.1f}M, "
+                        f"Memory: {mem_usage}"
+                    )
+                    sys.stdout.flush()
+                    last_log_time = time()
 
     finally:
         cache.close_all()
@@ -445,8 +484,12 @@ def main():
         help=f'Max open file handles (default: {MAX_OPEN_FILES})'
     )
     parser.add_argument(
-        '--start-line', type=int, default=16_805_000_000,
-        help='Line number to resume from (default: 16,805,000,000)'
+        '--start-line', type=int, default=0,
+        help='Line number to resume from (default: 0)'
+    )
+    parser.add_argument(
+        '--chunk-size', type=int, default=CHUNK_SIZE,
+        help=f'Lines per chunk (default: {CHUNK_SIZE:,})'
     )
 
     args = parser.parse_args()
@@ -461,7 +504,8 @@ def main():
         workers=args.workers,
         skip_existing=not args.no_skip,
         max_handles=args.max_handles,
-        start_line=args.start_line
+        start_line=args.start_line,
+        chunk_size=args.chunk_size
     )
 
 
