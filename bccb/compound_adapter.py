@@ -202,7 +202,7 @@ class Compound:
 
             t0 = time()
 
-            self.download_chembl_data()
+            self.download_chembl_data(cache=cache)
 
             if CompoundNodeField.SELFORMER_EMBEDDING.value in self.node_fields:
                 self.retrieve_selformer_embeddings(
@@ -252,7 +252,7 @@ class Compound:
             f"All data is processed in {round((t1-t0) / 60, 2)} mins".upper()
         )
 
-    def download_chembl_data(self) -> None:
+    def download_chembl_data(self, cache: bool = False) -> None:
         """
         Memory-efficient ChemBL data download.
         Uses streaming to avoid loading millions of records into memory.
@@ -400,7 +400,7 @@ class Compound:
     def process_chembl_cti_data(self) -> pd.DataFrame:
 
         if not hasattr(self, "chembl_acts"):
-            self.download_chembl_data()
+            self.download_chembl_data(cache=False)
 
         logger.debug(
             "Started Chembl processing compound-target interaction data"
@@ -728,7 +728,7 @@ class Compound:
         Reformats compound node data to be ready for import into the BioCypher.
         """
         if not hasattr(self, "compounds"):
-            self.download_chembl_data()
+            self.download_chembl_data(cache=False)
 
         logger.debug("Creating compound nodes.")
 

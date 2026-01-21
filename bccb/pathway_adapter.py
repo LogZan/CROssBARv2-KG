@@ -277,7 +277,7 @@ class Pathway:
                     self.reactome_chebi_pathway = list(reactome.reactome_chebis())
                     self.chebi_to_drugbank = {
                         list(v)[0]: k
-                        for k, v in unichem.unichem_mapping("drugbank", "chebi").items()
+                        for k, v in unichem.unichem_mapping("DrugBank", "ChEBI").items()
                     }
                 except Exception as e:
                     logger.warning(f"Failed to download Reactome chebi data: {e}")
@@ -354,7 +354,7 @@ class Pathway:
                     ]
                     self.chebi_to_drugbank = {
                         list(v)[0]: k
-                        for k, v in unichem.unichem_mapping("DrugBank", "chebi").items()
+                        for k, v in unichem.unichem_mapping("DrugBank", "ChEBI").items()
                     }
                     logger.info(f"Loaded {len(self.reactome_chebi_pathway)} Reactome chebi-pathway relations")
                 except Exception as e:

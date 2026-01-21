@@ -259,6 +259,7 @@ uniprot_node_fields = [getattr(UniprotNodeField, nf) for nf in config['uniprot']
 uniprot_edge_types = [getattr(UniprotEdgeType, et) for et in config['uniprot']['edge_types']]
 uniprot_id_type = [getattr(UniprotIDField, idf) for idf in config['uniprot']['id_fields']]
 
+
 log_adapter_boundary("UniProt SwissProt", "start")
 try:
     uniprot_adapter = UniprotSwissprot(
@@ -317,6 +318,7 @@ print(f"  Feature types: {len(uniprot_adapter.feature_nodes)}")
 print(f"  Disease nodes: {len(uniprot_adapter.disease_nodes)}")
 print(f"  Proteins with keywords: {len(uniprot_adapter.protein_keywords)}")
 
+
 # UniProt Keywords (vocabulary with hierarchy and GO mappings)
 log_adapter_boundary("UniProt Keywords", "start")
 try:
@@ -355,6 +357,7 @@ finally:
     aggressive_memory_cleanup("UniProt Keywords")
     log_adapter_boundary("UniProt Keywords", "end")
 
+
 # PPI
 log_adapter_boundary("PPI", "start")
 try:
@@ -378,12 +381,14 @@ finally:
     aggressive_memory_cleanup("PPI")
     log_adapter_boundary("PPI", "end")
 
+
 # protein domain
-# Note: pypath 0.16.28+ uses rescued data from OmniPath, currently only human (9606) available
+# Note: pypath 0.16.28+ uses rescued data from OmniPath, currently only human (9606) available. 
+# Now using new API to download all species interpro data
 log_adapter_boundary("InterPro", "start")
 try:
     interpro_adapter = InterPro(
-        organism=9606,  # Use human for now, rescued data only supports 9606
+        organism=ORGANISM,
         test_mode=TEST_MODE
     )
 
@@ -403,6 +408,7 @@ finally:
         del interpro_adapter
     aggressive_memory_cleanup("InterPro")
     log_adapter_boundary("InterPro", "end")
+
 
 # gene ontology
 log_adapter_boundary("GO", "start")
@@ -449,7 +455,6 @@ finally:
     log_adapter_boundary("Drug", "end")
 
 
-
 log_adapter_boundary("Compound", "start")
 try:
     compound_adapter = Compound(
@@ -473,7 +478,6 @@ finally:
     log_adapter_boundary("Compound", "end")
 
 
-
 log_adapter_boundary("Orthology", "start")
 try:
     orthology_adapter = Orthology(
@@ -491,6 +495,7 @@ finally:
         del orthology_adapter
     aggressive_memory_cleanup("Orthology")
     log_adapter_boundary("Orthology", "end")
+
 
 # disease
 log_adapter_boundary("Disease", "start")
@@ -517,6 +522,7 @@ finally:
     aggressive_memory_cleanup("Disease")
     log_adapter_boundary("Disease", "end")
 
+
 # phenotype
 log_adapter_boundary("Phenotype", "start")
 try:
@@ -535,6 +541,7 @@ finally:
         del phenotype_adapter
     aggressive_memory_cleanup("Phenotype")
     log_adapter_boundary("Phenotype", "end")
+
 
 # pathway
 log_adapter_boundary("Pathway", "start")
@@ -586,6 +593,7 @@ finally:
     print("Memory cleaned up after Side effect adapter")
     log_adapter_boundary("Side Effect", "end")
 
+
 # ec numbers
 log_adapter_boundary("EC", "start")
 try:
@@ -607,6 +615,7 @@ finally:
         del ec_adapter
     aggressive_memory_cleanup("EC")
     log_adapter_boundary("EC", "end")
+
 
 # tf-gen
 log_adapter_boundary("TFGene", "start")

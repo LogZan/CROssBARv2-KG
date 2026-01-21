@@ -701,26 +701,31 @@ class PPI:
         # it may take around 100 hours to download whole data
         for tax in tqdm(self.tax_ids, desc="Retrieving STRING data"):
             if tax not in tax_ids_to_be_skipped:
-                # remove proteins that does not have swissprot ids
-                organism_string_ints = [
-                    i
-                    for i in string.string_links_interactions(
-                        ncbi_tax_id=int(tax),
-                        score_threshold="high_confidence",
-                    )
-                    if i.protein_a in self.string_to_uniprot
-                    and i.protein_b in self.string_to_uniprot
-                ]
+                try:
+                    logger.debug(f"Processing STRING data for organism {tax}")
+                    # remove proteins that does not have swissprot ids
+                    organism_string_ints = [
+                        i
+                        for i in string.string_links_interactions(
+                            ncbi_tax_id=int(tax),
+                            score_threshold="high_confidence",
+                        )
+                        if i.protein_a in self.string_to_uniprot
+                        and i.protein_b in self.string_to_uniprot
+                    ]
 
-                logger.debug(
-                    f"STRING data with taxonomy id {str(tax)}, filtered interaction count for this tax id is {len(organism_string_ints)}"
-                )
-
-                if organism_string_ints:
-                    self.string_ints.extend(organism_string_ints)
                     logger.debug(
-                        f"Total interaction count is {len(self.string_ints)}"
+                        f"STRING data with taxonomy id {str(tax)}, filtered interaction count for this tax id is {len(organism_string_ints)}"
                     )
+
+                    if organism_string_ints:
+                        self.string_ints.extend(organism_string_ints)
+                        logger.debug(
+                            f"Total interaction count is {len(self.string_ints)}"
+                        )
+                except (IndexError, ValueError) as e:
+                    logger.warning(f"Failed to process STRING data for organism {tax}: {e}. Skipping this organism.")
+                    continue
 
         t1 = time()
         action = "retrieved" if cache else "downloaded"

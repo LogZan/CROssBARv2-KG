@@ -525,7 +525,12 @@ class Drug:
     @validate_call
     def retrieve_selformer_embeddings(self,
                                 selformer_embedding_path: FilePath | None = None) -> None:
-        
+
+        if selformer_embedding_path is None:
+            logger.warning("SELFormer embedding path is None, skipping embedding retrieval")
+            self.drugbank_id_to_selformer_embedding = {}
+            return
+
         logger.info("Retrieving SELFormer drug embeddings")
 
         self.drugbank_id_to_selformer_embedding = {}

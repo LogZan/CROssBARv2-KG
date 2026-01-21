@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import gc
 import requests
+import gzip
 
 from pypath.share import curl, settings
 from pypath.inputs import interpro
@@ -235,6 +236,39 @@ class InterPro:
         self.interpro_external_xrefs = {}
         self.interpro_structural_xrefs = {}
 
+        # If cache=True and local FTP files exist, use them instead of the API
+        if cache:
+            local_dir = os.environ.get(
+                "INTERPRO_DATA_DIR",
+                "/GenSIvePFS/users/data/InterPro/107.0",
+            )
+            protein2ipr_path = os.path.join(local_dir, "protein2ipr.dat.gz")
+            entry_list_path = os.path.join(local_dir, "entry.list")
+            if os.path.exists(protein2ipr_path) and os.path.exists(entry_list_path):
+                logger.info(
+                    "Using local InterPro files from %s (cache=True)",
+                    local_dir,
+                )
+                self._load_interpro_from_local_files(
+                    protein2ipr_path=protein2ipr_path,
+                    entry_list_path=entry_list_path,
+                )
+
+                # Load embeddings if requested
+                if (
+                    InterProNodeField.DOM2VEC_EMBEDDING.value in self.node_fields
+                    and dom2vec_embedding_path is not None
+                ):
+                    self.retrieve_dom2vec_embeddings(
+                        dom2vec_embedding_path=dom2vec_embedding_path
+                    )
+
+                t1 = time()
+                logger.info(
+                    f"InterPro domain data is retrieved in {round((t1-t0) / 60, 2)} mins"
+                )
+                return
+
         # Step 1: Get list of reviewed proteins
         logger.info("Fetching reviewed protein list...")
         protein_list = []
@@ -347,6 +381,83 @@ class InterPro:
         logger.info(
             f"InterPro domain data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
+
+    def _load_interpro_from_local_files(
+        self,
+        protein2ipr_path: str,
+        entry_list_path: str,
+    ) -> None:
+        """Load InterPro data from local FTP dump files with memory-efficient streaming."""
+        entry_meta = {}
+        with open(entry_list_path, "r", encoding="utf-8") as fh:
+            header = True
+            for line in fh:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                if header:
+                    header = False
+                    continue
+                parts = line.split("\t")
+                if len(parts) < 3:
+                    continue
+                entry_id, entry_type, entry_name = parts[0], parts[1], parts[2]
+                entry_meta[entry_id] = {
+                    "name": entry_name,
+                    "type": entry_type,
+                }
+
+        logger.info("Parsing protein2ipr data from %s", protein2ipr_path)
+        max_proteins = 100 if self.test_mode else None
+
+        # Batch processing to reduce memory usage
+        batch_size = 10000
+        protein_count = 0
+        batch_count = 0
+
+        with gzip.open(protein2ipr_path, "rt", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                parts = line.split("\t")
+                if len(parts) < 6:
+                    continue
+                protein_id, entry_id, entry_name, _, start, end = parts[:6]
+                protein_id = protein_id.upper()
+
+                # Early stopping for test mode
+                if max_proteins is not None and protein_id not in self.protein_domains:
+                    if len(self.protein_domains) >= max_proteins:
+                        break
+
+                if entry_id not in self.interpro_entries:
+                    meta = entry_meta.get(entry_id, {})
+                    self.interpro_entries[entry_id] = {
+                        "name": meta.get("name") or entry_name,
+                        "type": meta.get("type"),
+                        "member_databases": {},
+                    }
+
+                domain_info = {
+                    "entry_id": entry_id,
+                    "entry_name": entry_name,
+                    "entry_type": self.interpro_entries[entry_id].get("type"),
+                    "start": int(start) if start.isdigit() else start,
+                    "end": int(end) if end.isdigit() else end,
+                }
+                self.protein_domains.setdefault(protein_id, []).append(domain_info)
+
+                # Track progress and trigger garbage collection periodically
+                if protein_id not in self.protein_domains or len(self.protein_domains[protein_id]) == 1:
+                    protein_count += 1
+                    if protein_count % batch_size == 0:
+                        batch_count += 1
+                        logger.debug(f"Processed {protein_count} proteins ({batch_count} batches)")
+                        gc.collect()
+
+        logger.info(f"Loaded {len(self.interpro_entries)} InterPro entries")
+        logger.info(f"Mapped {len(self.protein_domains)} proteins to domains")
 
     def _fetch_json(self, url: str, cache: bool, cache_dir: str, tax_label: str | None = None) -> dict:
         """Fetch JSON with optional file cache under the InterPro cache dir."""

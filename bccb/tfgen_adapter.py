@@ -58,7 +58,7 @@ class TFGeneOrganismField(IntEnum, metaclass=TFGeneEnumMeta):
 
 class TFGeneModel(BaseModel):
     edge_fields: Union[list[TFGeneEdgeField], None] = None
-    organism: Union[list[TFGeneOrganismField], None] = None
+    organism: Union[list[TFGeneOrganismField], Literal["*"], None] = None
     test_mode: bool = False
     export_csv: bool = False
     output_dir: DirectoryPath | None = None
@@ -97,6 +97,7 @@ class TFGene:
         self.export_csv = model["export_csv"]
         self.output_dir = model["output_dir"]
         self.add_prefix = model["add_prefix"]
+        self.test_mode = model["test_mode"]
 
         # set edge fields
         self.set_edge_fields(edge_fields=model["edge_fields"])
@@ -109,7 +110,7 @@ class TFGene:
 
         # set early_stopping, if test_mode true
         self.early_stopping = None
-        if model["test_mode"]:
+        if self.test_mode:
             self.early_stopping = 100
 
     @validate_call
@@ -142,18 +143,20 @@ class TFGene:
             logger.debug("Started downloading TF-Gene data")
             t0 = time()
 
-            self.download_dorothea_data()
-            self.download_collectri_data()
-            self.download_trrust_data()
+            self.download_dorothea_data(cache=cache)
+            self.download_collectri_data(cache=cache)
+            self.download_trrust_data(cache=cache)
 
             t1 = time()
+            action = "retrieved" if cache else "downloaded"
             logger.info(
-                f"TF-Gene data is downloaded in {round((t1-t0) / 60, 2)} mins"
+                f"TF-Gene data is {action} in {round((t1-t0) / 60, 2)} mins"
             )
 
-    def download_dorothea_data(self) -> None:
+    def download_dorothea_data(self, cache: bool = False) -> None:
 
-        logger.debug("Started downloading DoRothEA data")
+        if not cache:
+            logger.debug("Started downloading DoRothEA data")
         t0 = time()
 
         if 9606 in self.organism:
@@ -164,12 +167,14 @@ class TFGene:
             )
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"DoRothEA data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"DoRothEA data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
-    def download_collectri_data(self) -> None:
-        logger.debug("Started downloading CollecTRI data")
+    def download_collectri_data(self, cache: bool = False) -> None:
+        if not cache:
+            logger.debug("Started downloading CollecTRI data")
         t0 = time()
 
         if 9606 in self.organism:
@@ -192,17 +197,19 @@ class TFGene:
                 }
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"CollecTRI data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"CollecTRI data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
-    def download_trrust_data(self) -> None:
-        logger.debug("Started downloading TRRUST data")
+    def download_trrust_data(self, cache: bool = False) -> None:
+        if not cache:
+            logger.debug("Started downloading TRRUST data")
         t0 = time()
 
         self.trrust_interactions = []
         self.trrust_gene_symbol_to_entrez_id = {}
-        
+
         try:
             if 9606 in self.organism:
                 human_data = list(trrust.trrust_human())
@@ -213,7 +220,7 @@ class TFGene:
                         self.trrust_gene_symbol_to_entrez_id[interaction.tf_symbol] = interaction.tf_entrez
                     if hasattr(interaction, 'target_symbol') and hasattr(interaction, 'target_entrez'):
                         self.trrust_gene_symbol_to_entrez_id[interaction.target_symbol] = interaction.target_entrez
-                        
+
             if 10090 in self.organism:
                 mouse_data = list(trrust.trrust_mouse())
                 self.trrust_interactions.extend(mouse_data)
@@ -226,8 +233,9 @@ class TFGene:
             logger.warning(f"TRRUST data download failed: {e}. 'NoneType' error suggests pypath failed to download data. Continuing without TRRUST data.")
 
         t1 = time()
+        action = "retrieved" if cache else "downloaded"
         logger.info(
-            f"TRRUST data is downloaded in {round((t1-t0) / 60, 2)} mins"
+            f"TRRUST data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
 
     def process_dorothea_tf_gene(self) -> pd.DataFrame:
@@ -550,7 +558,10 @@ class TFGene:
             self.edge_fields = [field.value for field in TFGeneEdgeField]
 
     def set_organism(self, organism):
-        if organism:
+        if organism == "*":
+            # Wildcard: include all supported organisms
+            self.organism = [field.value for field in TFGeneOrganismField]
+        elif organism:
             self.organism = [field.value for field in organism]
         else:
             self.organism = [field.value for field in TFGeneOrganismField]
