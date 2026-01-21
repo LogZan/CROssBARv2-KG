@@ -121,8 +121,8 @@ class BioGRID:
             self.biogrid_ints = biogrid.biogrid_all_interactions(self.organism, 9999999999, False)
                         
             # download these fields for mapping from gene symbol to uniprot id          
-            self.uniprot_to_gene = uniprot.uniprot_data("gene_names", "*", True)
-            self.uniprot_to_tax = uniprot.uniprot_data("organism_id", "*", True)
+            self.uniprot_to_gene = uniprot.uniprot_data(fields="gene_names", organism=None, reviewed=True)
+            self.uniprot_to_tax = uniprot.uniprot_data(fields="organism_id", organism=None, reviewed=True)
             
             
         if self.test_mode:

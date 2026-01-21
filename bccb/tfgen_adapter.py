@@ -177,7 +177,7 @@ class TFGene:
                 collectri.collectri_interactions()
             )
 
-            uniprot_data = uniprot.uniprot_data("xref_geneid", 9606, True)
+            uniprot_data = uniprot.uniprot_data(fields="xref_geneid", organism=9606, reviewed=True)
             # Handle both dict and list return types from newer pypath versions
             if isinstance(uniprot_data, list):
                 self.uniprot_to_entrez = {

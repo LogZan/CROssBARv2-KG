@@ -144,6 +144,23 @@ malacards_json_path = f"{malacards_dir_path}/{config['malacards']['diseases']}"
 malacards_related_diseases_json_path = f"{malacards_dir_path}/{config['malacards']['related_diseases']}"
 
 
+# Organism parameter conversion helpers for pypath compatibility
+# TODO: Unused, now setting organism=None in majority of uniprot.uniprot_data() calls
+def organism_for_uniprot_data(organism):
+    """Convert organism value for uniprot.uniprot_data() calls.
+
+    In pypath v0.16+, uniprot_data() uses None for all organisms, not '*'.
+    """
+    return None if organism == "*" else organism
+
+def organism_for_all_uniprots(organism):
+    """Convert organism value for uniprot._all_uniprots() calls.
+
+    _all_uniprots() uses '*' for all organisms.
+    """
+    return organism
+
+
 # Helper for consistent logging
 def log_adapter_boundary(adapter_name: str, phase: str):
     """Log adapter execution boundary."""

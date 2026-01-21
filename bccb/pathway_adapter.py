@@ -410,7 +410,7 @@ class Pathway:
                     )
 
             # Handle case where uniprot_data returns list instead of dict
-            uniprot_kegg_data = uniprot.uniprot_data("xref_kegg", 9606, True)
+            uniprot_kegg_data = uniprot.uniprot_data(fields="xref_kegg", organism=9606, reviewed=True)
             if isinstance(uniprot_kegg_data, list):
                 if not uniprot_kegg_data:
                     self.kegg_to_uniprot = {}

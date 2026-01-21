@@ -341,7 +341,7 @@ class Uniprot:
                 )
             else:
                 self.data[query_key] = uniprot.uniprot_data(
-                    query_key, self.organism, self.rev
+                    fields=query_key, organism=self.organism, reviewed=self.rev
                 )
 
             logger.debug(f"{query_key} field is downloaded")

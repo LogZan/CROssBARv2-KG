@@ -478,7 +478,7 @@ class Disease:
             self.opentargets_direct = opentargets.opentargets_direct_score()
 
             uniprot_to_entrez = uniprot.uniprot_data(
-                "xref_geneid", "9606", True
+                fields="xref_geneid", organism="9606", reviewed=True
             )
             self.uniprot_to_entrez = {
                 k: v.strip(";").split(";")[0]
@@ -487,7 +487,7 @@ class Disease:
 
             if not hasattr(self, "ensembl_gene_to_uniprot"):
                 uniprot_to_ensembl = uniprot.uniprot_data(
-                    "xref_ensembl", "9606", True
+                    fields="xref_ensembl", organism="9606", reviewed=True
                 )
 
                 self.ensembl_gene_to_uniprot = {
@@ -510,7 +510,7 @@ class Disease:
 
             if not hasattr(self, "ensembl_gene_to_uniprot"):
                 uniprot_to_ensembl = uniprot.uniprot_data(
-                    "xref_ensembl", "9606", True
+                    fields="xref_ensembl", organism="9606", reviewed=True
                 )
 
                 self.ensembl_gene_to_uniprot = {
@@ -570,7 +570,7 @@ class Disease:
 
         if not hasattr(self, "uniprot_to_entrez"):
             uniprot_to_entrez = uniprot.uniprot_data(
-                "xref_geneid", "9606", True
+                fields="xref_geneid", organism="9606", reviewed=True
             )
             self.uniprot_to_entrez = {
                 k: v.strip(";").split(";")[0]
@@ -578,7 +578,7 @@ class Disease:
             }
 
         self.gene_symbol_to_uniprot = {}
-        for k, v in uniprot.uniprot_data("gene_names", "9606", True).items():
+        for k, v in uniprot.uniprot_data(fields="gene_names", organism="9606", reviewed=True).items():
             for symbol in v.split(" "):
                 self.gene_symbol_to_uniprot[symbol] = k
 
@@ -643,7 +643,7 @@ class Disease:
 
             self.gene_symbol_to_uniprot = {}
             for k, v in uniprot.uniprot_data(
-                "gene_names", "9606", True
+                fields="gene_names", organism="9606", reviewed=True
             ).items():
                 for symbol in v.split(" "):
                     self.gene_symbol_to_uniprot[symbol] = k

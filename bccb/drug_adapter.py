@@ -885,7 +885,7 @@ class Drug:
             self.dgidb_dti = []
 
         # map entrez gene ids to swissprot ids
-        uniprot_to_entrez = uniprot.uniprot_data("xref_geneid", "*", True)
+        uniprot_to_entrez = uniprot.uniprot_data(fields="xref_geneid", organism=None, reviewed=True)
         self.entrez_to_uniprot = collections.defaultdict(list)
         if isinstance(uniprot_to_entrez, list):
             if not uniprot_to_entrez:
@@ -1850,7 +1850,7 @@ class Drug:
         t0 = time()
 
         # map string ids to swissprot ids
-        uniprot_to_string = uniprot.uniprot_data("xref_string", "*", True)
+        uniprot_to_string = uniprot.uniprot_data(fields="xref_string", organism=None, reviewed=True)
         self.string_to_uniprot = collections.defaultdict(list)
         if isinstance(uniprot_to_string, dict):
             for k, v in uniprot_to_string.items():

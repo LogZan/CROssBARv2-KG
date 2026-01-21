@@ -209,7 +209,7 @@ class Orthology:
         """
 
         self.entry_name_to_uniprot = uniprot.uniprot_data(
-            field="id", reviewed=True, organism="*"
+            field="id", reviewed=True, organism=None
         )
         if isinstance(self.entry_name_to_uniprot, list):
             if not self.entry_name_to_uniprot:
@@ -226,7 +226,7 @@ class Orthology:
             self.entry_name_to_uniprot = {}
 
         uniprot_to_entrez = uniprot.uniprot_data(
-            field="xref_geneid", reviewed=True, organism="*"
+            field="xref_geneid", reviewed=True, organism=None
         )
         if isinstance(uniprot_to_entrez, list):
             if not uniprot_to_entrez:
@@ -333,7 +333,7 @@ class Orthology:
         t0 = time()
 
         uniprot_to_entrez = uniprot.uniprot_data(
-            field="xref_geneid", reviewed=True, organism="*"
+            field="xref_geneid", reviewed=True, organism=None
         )
         if isinstance(uniprot_to_entrez, list):
             if not uniprot_to_entrez:

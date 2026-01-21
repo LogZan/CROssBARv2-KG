@@ -518,7 +518,7 @@ class Compound:
         t0 = time()
 
         # map string ids to swissprot ids
-        uniprot_to_string = uniprot.uniprot_data("xref_string", "*", True)
+        uniprot_to_string = uniprot.uniprot_data(fields="xref_string", organism=None, reviewed=True)
         self.string_to_uniprot = collections.defaultdict(list)
         
         # Handle case where uniprot_to_string is a list instead of dict
