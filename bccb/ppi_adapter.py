@@ -689,10 +689,12 @@ class PPI:
                 f"This is the link of STRING data we downloaded:{urls.urls['string']['links']}. Please check if it is up to date"
             )
 
-        # this tax id give an error
+        # TODO:this tax id give an error
         tax_ids_to_be_skipped = [
             "4565",
             "8032",
+            "1829", # list out of range
+            "1894", # list out of range
         ]
 
         # Filter out problematic tax IDs
@@ -723,8 +725,16 @@ class PPI:
                         logger.debug(
                             f"Total interaction count is {len(self.string_ints)}"
                         )
+                except EOFError as e:
+                    logger.warning(
+                        f"Failed to process STRING data for organism {tax}: gzip file ended early (possibly truncated cache). "
+                        f"Skipping this organism. Error: {e}"
+                    )
+                    continue
                 except (IndexError, ValueError) as e:
-                    logger.warning(f"Failed to process STRING data for organism {tax}: {e}. Skipping this organism.")
+                    logger.warning(
+                        f"Failed to process STRING data for organism {tax}: {e}. Skipping this organism."
+                    )
                     continue
 
         t1 = time()
