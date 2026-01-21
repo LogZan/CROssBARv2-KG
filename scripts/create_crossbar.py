@@ -36,9 +36,12 @@ parser.add_argument('--only', type=str, help='Only run specified adapters (comma
 parser.add_argument('--reset-checkpoint', action='store_true', help='Clear checkpoint and restart')
 args = parser.parse_args()
 
+# Calculate output_dir_path from config
+output_dir_path = str(project_root / crossbar_config['settings'].get('output_dir', 'biocypher-out'))
+
 # Initialize checkpoint manager
-checkpoint_enabled = biocypher_config.get('checkpoint', {}).get('enabled', True) and not args.no_checkpoint
-checkpoint_file = biocypher_config.get('checkpoint', {}).get('file', 'output/.checkpoint.json')
+checkpoint_enabled = crossbar_config.get('checkpoint', {}).get('enabled', True) and not args.no_checkpoint
+checkpoint_file = str(Path(output_dir_path) / '.checkpoint.json')
 
 from bccb.checkpoint import CheckpointManager
 checkpoint = CheckpointManager(checkpoint_file) if checkpoint_enabled else None
@@ -157,7 +160,6 @@ with open(project_root / "config/crossbar_config.yaml", 'r') as f:
 
 # Extract config values
 timestamp = datetime.now(TZ).strftime("%Y%m%d%H%M%S")
-output_dir_path = str(project_root / "biocypher-out")
 embeddings_dir = config['data_paths']['embeddings_dir']
 malacards_dir_path = config['data_paths']['malacards_dir']
 uniprot_json_path = config['data_paths']['uniprot_json']
@@ -318,7 +320,7 @@ drugbank_passwd = crossbar_config['drugbank']['password']
 # UniProt configuration
 uniprot_node_types = [getattr(UniprotNodeType, nt) for nt in crossbar_config['uniprot']['node_types']]
 uniprot_node_fields = [getattr(UniprotNodeField, nf) for nf in crossbar_config['uniprot']['node_fields']]
-uniprot_edge_types = [getattr(UniprotEdgeType, et) for nt in crossbar_config['uniprot']['edge_types']]
+uniprot_edge_types = [getattr(UniprotEdgeType, et) for et in crossbar_config['uniprot']['edge_types']]
 uniprot_id_type = [getattr(UniprotIDField, idf) for idf in crossbar_config['uniprot']['id_fields']]
 
 

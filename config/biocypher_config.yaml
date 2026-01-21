@@ -1,19 +1,11 @@
 #  biocypher module settings
 biocypher:
-
   offline: true
   head_ontology:
     url: ontology/biolink-model.owl.ttl
     root_node: entity
 
-# Checkpoint settings for resumable execution
-checkpoint:
-  enabled: true                              # Enable checkpoint mechanism
-  file: biocypher-out/checkpoints/.checkpoint.json    # Checkpoint file location
-
-
 neo4j:
-
   database_name: neo4j
   wipe: true
   delimiter: '\t'

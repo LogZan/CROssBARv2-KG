@@ -8,6 +8,12 @@ settings:
   update_schema_dynamically: false      # Auto-update schema with new annotation/feature types
   organism: "*"                       # NCBI taxonomy ID (9606=human, "*"=all)
   use_embeddings: false                 # Load and use embeddings (set false to skip for faster processing)
+  output_dir: "biocypher-out/20260121130930"  # Output directory (use specific dir to resume, or "biocypher-out" for new timestamped dir)
+
+# Checkpoint settings for resumable execution
+checkpoint:
+  enabled: true                              # Enable checkpoint mechanism
+  # Checkpoint file will be placed in output_dir/.checkpoint.json
 
 # Data paths
 data_paths:
