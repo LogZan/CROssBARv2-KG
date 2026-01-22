@@ -85,7 +85,7 @@ class LRUFileHandleCache:
     LRU cache for file handles with automatic closing of old handles.
     Memory-efficient - writes to disk immediately instead of storing in memory.
     """
-    
+
     def __init__(self, max_handles: int, output_dir: Path, header: str, buffer_size: int = BUFFER_SIZE):
         self.max_handles = max_handles
         self.output_dir = output_dir
@@ -94,15 +94,22 @@ class LRUFileHandleCache:
         self.line_counts = {}  # tax_id -> number of lines written
         self.buffers = {}  # tax_id -> list of lines (small buffer)
         self.buffer_size = buffer_size
+        self.pid = os.getpid()  # Process ID for concurrent execution
         
     def _open_handle(self, tax_id: str):
-        """Open a handle in append mode, writing header if file is new/empty."""
+        """Open handle to temp file. Will be renamed to final name when all done."""
         file_hash = generate_pypath_hash(tax_id)
         filename = f"{file_hash}-{tax_id}.protein.links.detailed.{STRING_VERSION}.txt.gz"
         filepath = self.output_dir / filename
+        temp_filepath = self.output_dir / f".tmp.{self.pid}.{filename}"
 
-        is_new = (not filepath.exists()) or filepath.stat().st_size == 0
-        handle = gzip.open(str(filepath), 'at', encoding='utf-8', compresslevel=1)
+        # If final file exists and is complete, skip
+        if filepath.exists() and is_complete_file(filepath):
+            return None
+
+        # Open temp file in append mode (same tax_id appears multiple times)
+        is_new = not temp_filepath.exists()
+        handle = gzip.open(str(temp_filepath), 'at', encoding='utf-8', compresslevel=1)
         if is_new:
             handle.write(self.header + '\n')
         return handle
@@ -112,32 +119,59 @@ class LRUFileHandleCache:
         if tax_id in self.handles:
             self.handles.move_to_end(tax_id)
             return self.handles[tax_id]
-        
-        # Close oldest handle if at limit
+
+        # Close oldest handle if at limit (but don't finalize yet)
         if len(self.handles) >= self.max_handles:
             oldest_tax_id, oldest_handle = self.handles.popitem(last=False)
             self._flush_buffer(oldest_tax_id, handle=oldest_handle, allow_open=False)
             oldest_handle.close()
             if oldest_tax_id in self.buffers:
                 del self.buffers[oldest_tax_id]
-        
-        # Open new handle with fast compression (append; avoid truncation)
+
+        # Open new handle
         handle = self._open_handle(tax_id)
+        if handle is None:  # File already exists and is complete
+            return None
+
         self.handles[tax_id] = handle
         if tax_id not in self.line_counts:
             self.line_counts[tax_id] = 0
         self.buffers[tax_id] = []
-        
+
         return handle
     
+    def _finalize_file(self, tax_id: str, handle):
+        """Close handle and rename temp file to final name (atomic operation)."""
+        try:
+            handle.close()
+
+            # Rename temp to final (atomic operation)
+            file_hash = generate_pypath_hash(tax_id)
+            filename = f"{file_hash}-{tax_id}.protein.links.detailed.{STRING_VERSION}.txt.gz"
+            temp_filepath = self.output_dir / f".tmp.{self.pid}.{filename}"
+            final_filepath = self.output_dir / filename
+
+            if temp_filepath.exists():
+                # Only keep file if it has data
+                if self.line_counts.get(tax_id, 0) > 0:
+                    temp_filepath.rename(final_filepath)
+                else:
+                    temp_filepath.unlink()
+        except Exception as e:
+            logger.warning(f"Failed to finalize file for tax_id {tax_id}: {e}")
+
     def write_lines(self, tax_id: str, lines: list):
         """Write multiple lines - buffers then flushes to disk."""
+        handle = self.get_handle(tax_id)
+        if handle is None:  # File already exists and is complete
+            return
+
         if tax_id not in self.buffers:
             self.buffers[tax_id] = []
-        
+
         self.buffers[tax_id].extend(lines)
         self.line_counts[tax_id] = self.line_counts.get(tax_id, 0) + len(lines)
-        
+
         # Flush if buffer is large enough - KEY: writes to disk, frees memory
         if len(self.buffers[tax_id]) >= self.buffer_size:
             self._flush_buffer(tax_id)
@@ -150,6 +184,9 @@ class LRUFileHandleCache:
                     handle = self.handles[tax_id]
                 elif allow_open:
                     handle = self._open_handle(tax_id)
+                    if handle is None:  # File already complete, skip
+                        self.buffers[tax_id] = []
+                        return
                     self.handles[tax_id] = handle
                 else:
                     return
@@ -162,25 +199,28 @@ class LRUFileHandleCache:
             self._flush_buffer(tax_id)
     
     def close_all(self):
-        """Flush all buffers and close all handles."""
+        """Flush all buffers, close all handles, and finalize temp files."""
+        # Flush all buffers first
         for tax_id in list(self.buffers.keys()):
             self._flush_buffer(tax_id)
 
+        # Close all handles and finalize (rename temp to final)
         for tax_id, handle in list(self.handles.items()):
             try:
-                handle.close()
-                # Delete empty files (only header, no data)
-                if self.line_counts.get(tax_id, 0) == 0:
-                    file_hash = generate_pypath_hash(tax_id)
-                    filename = f"{file_hash}-{tax_id}.protein.links.detailed.{STRING_VERSION}.txt.gz"
-                    filepath = self.output_dir / filename
-                    if filepath.exists():
-                        filepath.unlink()
-                        logger.debug(f"Deleted empty file for tax_id {tax_id}")
-            except:
-                pass
+                self._finalize_file(tax_id, handle)
+            except Exception as e:
+                logger.warning(f"Failed to finalize {tax_id}: {e}")
+
         self.handles.clear()
         self.buffers.clear()
+
+        # Clean up only this process's temp files
+        for temp_file in self.output_dir.glob(f".tmp.{self.pid}.*.txt.gz"):
+            try:
+                temp_file.unlink()
+                logger.debug(f"Cleaned up leftover temp file: {temp_file.name}")
+            except Exception:
+                pass
     
     def get_stats(self) -> dict:
         """Get statistics."""
@@ -229,16 +269,20 @@ def iter_chunks(lines_iter, chunk_size: int):
 
 
 def is_complete_file(path: Path) -> bool:
-    """Return True if gz file has at least header + 1 data line."""
+    """Return True if gz file is valid and complete (full gzip integrity check)."""
     if not path.exists():
         return False
     try:
+        # Quick size check to skip empty or tiny files
+        if path.stat().st_size < 100:
+            return False
+
+        # Read entire stream to verify gzip integrity; count lines for minimum content.
+        line_count = 0
         with gzip.open(str(path), 'rt', encoding='utf-8') as fh:
-            header = fh.readline()
-            if not header:
-                return False
-            data_line = fh.readline()
-            return bool(data_line)
+            for _ in fh:
+                line_count += 1
+        return line_count >= 2
     except Exception:
         return False
 
@@ -263,6 +307,35 @@ def split_string_safe(
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+
+    # Clean up leftover temp files from previous interrupted runs
+    # Only delete temp files from PIDs that are no longer running
+    temp_files = list(output_path.glob(".tmp.*.txt.gz"))
+    if temp_files and HAS_PSUTIL:
+        current_pids = {p.pid for p in psutil.process_iter(['pid'])}
+        stale_files = []
+
+        for temp_file in temp_files:
+            # Extract PID from filename: .tmp.{pid}.{rest}
+            parts = temp_file.name.split('.', 3)
+            if len(parts) >= 3:
+                try:
+                    file_pid = int(parts[2])
+                    if file_pid not in current_pids:
+                        stale_files.append(temp_file)
+                except ValueError:
+                    # Old format without PID, safe to delete
+                    stale_files.append(temp_file)
+
+        if stale_files:
+            logger.info(f"Cleaning up {len(stale_files)} stale temp files from stopped processes...")
+            for temp_file in stale_files:
+                try:
+                    temp_file.unlink()
+                except Exception as e:
+                    logger.warning(f"Could not remove temp file {temp_file.name}: {e}")
+    elif temp_files and not HAS_PSUTIL:
+        logger.warning("psutil not available; skipping stale temp file cleanup.")
 
     # Check for pigz
     has_pigz = check_pigz()

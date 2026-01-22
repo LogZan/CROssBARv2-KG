@@ -387,77 +387,10 @@ class InterPro:
         protein2ipr_path: str,
         entry_list_path: str,
     ) -> None:
-        """Load InterPro data from local FTP dump files with memory-efficient streaming."""
-        entry_meta = {}
-        with open(entry_list_path, "r", encoding="utf-8") as fh:
-            header = True
-            for line in fh:
-                line = line.rstrip("\n")
-                if not line:
-                    continue
-                if header:
-                    header = False
-                    continue
-                parts = line.split("\t")
-                if len(parts) < 3:
-                    continue
-                entry_id, entry_type, entry_name = parts[0], parts[1], parts[2]
-                entry_meta[entry_id] = {
-                    "name": entry_name,
-                    "type": entry_type,
-                }
-
-        logger.info("Parsing protein2ipr data from %s", protein2ipr_path)
-        max_proteins = 100 if self.test_mode else None
-
-        # Batch processing to reduce memory usage
-        batch_size = 10000
-        protein_count = 0
-        batch_count = 0
-
-        with gzip.open(protein2ipr_path, "rt", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.rstrip("\n")
-                if not line:
-                    continue
-                parts = line.split("\t")
-                if len(parts) < 6:
-                    continue
-                protein_id, entry_id, entry_name, _, start, end = parts[:6]
-                protein_id = protein_id.upper()
-
-                # Early stopping for test mode
-                if max_proteins is not None and protein_id not in self.protein_domains:
-                    if len(self.protein_domains) >= max_proteins:
-                        break
-
-                if entry_id not in self.interpro_entries:
-                    meta = entry_meta.get(entry_id, {})
-                    self.interpro_entries[entry_id] = {
-                        "name": meta.get("name") or entry_name,
-                        "type": meta.get("type"),
-                        "member_databases": {},
-                    }
-
-                domain_info = {
-                    "entry_id": entry_id,
-                    "entry_name": entry_name,
-                    "entry_type": self.interpro_entries[entry_id].get("type"),
-                    "start": int(start) if start.isdigit() else start,
-                    "end": int(end) if end.isdigit() else end,
-                }
-                self.protein_domains.setdefault(protein_id, []).append(domain_info)
-
-                # Track progress and trigger garbage collection periodically
-                if protein_id not in self.protein_domains or len(self.protein_domains[protein_id]) == 1:
-                    protein_count += 1
-                    if protein_count % batch_size == 0:
-                        batch_count += 1
-                        logger.debug(f"Processed {protein_count} proteins ({batch_count} batches)")
-                        gc.collect()
-
-        logger.info(f"Loaded {len(self.interpro_entries)} InterPro entries")
-        logger.info(f"Mapped {len(self.protein_domains)} proteins to domains")
+        """Save file paths for streaming access - no data loaded into memory."""
+        self.protein2ipr_path = protein2ipr_path
+        self.entry_list_path = entry_list_path
+        logger.info("InterPro file paths saved for streaming access")
 
     def _fetch_json(self, url: str, cache: bool, cache_dir: str, tax_label: str | None = None) -> dict:
         """Fetch JSON with optional file cache under the InterPro cache dir."""
@@ -528,183 +461,153 @@ class InterPro:
                 self.interpro_id_to_dom2vec_embedding[interpro_id] = np.array(embedding).astype(np.float16)
                     
     @validate_call
-    def get_interpro_nodes(self, node_label: str = "domain") -> list[tuple]:
+    def get_interpro_nodes(self, node_label: str = "domain"):
         """
-        Prepares InterPro domain nodes for BioCypher
+        Stream InterPro domain nodes for BioCypher using generator
         Args:
             node_label : label of interpro nodes
         """
+        # Check if we have file paths (local file mode)
+        if hasattr(self, 'entry_list_path') and self.entry_list_path:
+            # Use streaming from local files
+            logger.info("Streaming InterPro nodes from local file")
+            counter = 0
 
-        # Check if we need to download data first
-        if not getattr(self, "interpro_entries", None):
-            self.download_domain_node_data()
+            with open(self.entry_list_path, "r", encoding="utf-8") as fh:
+                header = True
+                for line in fh:
+                    line = line.rstrip("\n")
+                    if not line:
+                        continue
+                    if header:
+                        header = False
+                        continue
+                    parts = line.split("\t")
+                    if len(parts) < 3:
+                        continue
 
-        # create list of nodes
-        node_list = []
+                    entry_id, entry_type, entry_name = parts[0], parts[1], parts[2]
+                    domain_id = self.add_prefix_to_id("interpro", entry_id)
 
-        # define primary and external attributes
-        primary_attributes = InterProNodeField.get_primary_attributes()
-        member_list_attributes = InterProNodeField.get_member_list_attributes()
-        external_attributes = InterProNodeField.get_external_attributes()
-        structural_attributes = InterProNodeField.get_structural_attributes()
+                    props = {}
+                    if InterProNodeField.NAME.value in self.node_fields:
+                        props["name"] = entry_name.replace("'", "^").replace("|", ",") if entry_name else None
+                    if InterProNodeField.TYPE.value in self.node_fields:
+                        props["type"] = entry_type
 
-        logger.debug("Creating domain nodes")
-        t0 = time()
+                    yield (domain_id, node_label, props)
 
-        # set counter for early stopping
-        counter = 0
-        
-        # Choose data source based on API metadata
-        if hasattr(self, "interpro_entries") and isinstance(self.interpro_entries, dict):
-            InterproEntry = collections.namedtuple(
-                "InterproEntry",
-                (
-                    "interpro_id",
-                    "protein_count",
-                    "name",
-                    "type",
-                    "publications",
-                    "parent_list",
-                    "child_list",
-                    "member_list",
-                ),
-            )
-            entries_source = (
-                InterproEntry(
-                    interpro_id=entry_id,
-                    protein_count=None,
-                    name=meta.get("name"),
-                    type=meta.get("type"),
-                    publications=None,
-                    parent_list=None,
-                    child_list=None,
-                    member_list=meta.get("member_databases", {}) or {},
-                )
-                for entry_id, meta in self.interpro_entries.items()
-            )
-            logger.info("Processing InterPro entries from API metadata...")
+                    counter += 1
+                    if self.early_stopping and counter >= self.early_stopping:
+                        break
+
+            logger.info(f"Streamed {counter} InterPro nodes")
         else:
-            # Use pre-loaded data
-            entries_source = self.interpro_entries
+            # Fallback to API mode (load data into memory)
+            if not getattr(self, "interpro_entries", None):
+                self.download_domain_node_data()
 
-        for entry in entries_source:
-            props = {}
-            interpro_props = entry._asdict()
+            logger.info("Generating InterPro nodes from API data")
+            counter = 0
 
-            domain_id = self.add_prefix_to_id("interpro", entry.interpro_id)
+            for entry_id, meta in getattr(self, "interpro_entries", {}).items():
+                domain_id = self.add_prefix_to_id("interpro", entry_id)
 
-            # get primary InterPro attributes
-            for element in primary_attributes:
+                props = {}
+                if InterProNodeField.NAME.value in self.node_fields:
+                    props["name"] = meta.get("name", "").replace("'", "^").replace("|", ",") if meta.get("name") else None
+                if InterProNodeField.TYPE.value in self.node_fields:
+                    props["type"] = meta.get("type")
 
-                if element in self.node_fields and interpro_props.get(element):
-                    if element == InterProNodeField.PROTEIN_COUNT.value:
-                        props[element.replace(" ", "_").lower()] = int(
-                            interpro_props.get(element)
-                        )
-                    elif element == InterProNodeField.NAME.value:
-                        props[element.replace(" ", "_").lower()] = interpro_props.get(element).replace("'","^").replace("|",",") if interpro_props.get(element) else None
-                    else:
-                        props[element.replace(" ", "_").lower()] = (
-                            self.check_length(interpro_props.get(element))
-                        )
+                yield (domain_id, node_label, props)
 
-            # get member list InterPro attributes
-            for element in member_list_attributes:
-                member_list = interpro_props.get("member_list", {})
-                if element in self.node_fields and member_list.get(element):
-                    props[element.replace(" ", "_").lower()] = (
-                        self.check_length(member_list.get(element))
-                    )
+                counter += 1
+                if self.early_stopping and counter >= self.early_stopping:
+                    break
 
-            # get external InterPro attributes
-            for element in external_attributes:
-                external_xrefs = getattr(self, "interpro_external_xrefs", {}).get(entry.interpro_id, {})
-                if element in self.node_fields and external_xrefs.get(element):
-                    props[element.replace(" ", "_").lower()] = (
-                        self.check_length(external_xrefs.get(element))
-                    )
-
-            # get structural InterPro attributes
-            for element in structural_attributes:
-                structural_xrefs = getattr(self, "interpro_structural_xrefs", {}).get(entry.interpro_id, {})
-                if element in self.node_fields and structural_xrefs.get(element):
-                    props[element.replace(" ", "_").lower()] = (
-                        self.check_length(structural_xrefs.get(element))
-                    )
-
-            # get dom2vec embedding
-            if InterProNodeField.DOM2VEC_EMBEDDING.value in self.node_fields:
-                embedding = getattr(self, 'interpro_id_to_dom2vec_embedding', {}).get(entry.interpro_id)
-                if embedding is not None:
-                    props[InterProNodeField.DOM2VEC_EMBEDDING.value] = [str(emb) for emb in embedding]
-
-            # add node to list
-            node_list.append((domain_id, node_label, props))
-
-            counter += 1
-
-            if self.early_stopping and counter >= self.early_stopping:
-                break
-            
-        t1 = time()
-        logger.info(f"InterPro nodes created in {round((t1-t0) / 60, 2)} mins")
-
-        return node_list
+            logger.info(f"Generated {counter} InterPro nodes")
 
     @validate_call
     def get_interpro_edges(
         self, edge_label: str = "protein_has_domain"
-    ) -> list[tuple]:
+    ):
         """
-        Prepares Protein-Domain edges for BioCypher
+        Stream Protein-Domain edges for BioCypher using generator
         Args:
             edge_label: label of protein-domain edge
         """
+        # Check if we have file paths (local file mode)
+        if hasattr(self, 'protein2ipr_path') and self.protein2ipr_path:
+            # Use streaming from local files
+            logger.info("Streaming InterPro edges from local file")
+            counter = 0
+            max_proteins = 100 if self.test_mode else None
+            seen_proteins = set()
 
-        if not hasattr(self, "interpro_annotations"):
-            self.download_domain_edge_data()
+            with gzip.open(self.protein2ipr_path, "rt", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.rstrip("\n")
+                    if not line:
+                        continue
+                    parts = line.split("\t")
+                    if len(parts) < 6:
+                        continue
 
-        # create list of edges
-        edge_list = []
+                    protein_id, entry_id, entry_name, _, start, end = parts[:6]
+                    protein_id = protein_id.upper()
 
-        logger.debug("Creating protein-domain edges")
-        t0 = time()
+                    # Early stopping for test mode
+                    if max_proteins is not None:
+                        if protein_id not in seen_proteins:
+                            if len(seen_proteins) >= max_proteins:
+                                break
+                            seen_proteins.add(protein_id)
 
-        # set counter for early stopping
-        counter = 0
+                    interpro_id = self.add_prefix_to_id("interpro", entry_id)
+                    uniprot_id = self.add_prefix_to_id("uniprot", protein_id)
 
-        # DOMAIN-PROTEIN EDGES
-        for k, v in tqdm(self.interpro_annotations.items()):
-            # k -> uniprot id
-            for annotation in v:
+                    props = {}
+                    if "start" in self.edge_fields:
+                        props["start"] = int(start) if start.isdigit() else start
+                    if "end" in self.edge_fields:
+                        props["end"] = int(end) if end.isdigit() else end
 
-                interpro_props = annotation._asdict()
-                props = {}
+                    yield (None, uniprot_id, interpro_id, edge_label, props)
 
-                for field in self.edge_fields:
-                    if interpro_props.get(field, None):
-                        props[field.replace(" ", "_").lower()] = (
-                            self.check_length(interpro_props[field])
-                        )
+                    counter += 1
+                    if self.early_stopping and counter >= self.early_stopping:
+                        break
 
-                interpro_id = self.add_prefix_to_id(
-                    "interpro", annotation.interpro_id
-                )
-                uniprot_id = self.add_prefix_to_id("uniprot", k)
+            logger.info(f"Streamed {counter} InterPro edges")
+        else:
+            # Fallback to API mode (load data into memory)
+            if not hasattr(self, "interpro_annotations"):
+                self.download_domain_edge_data()
 
-                edge_list.append(
-                    (None, uniprot_id, interpro_id, edge_label, props)
-                )
+            logger.info("Generating InterPro edges from API data")
+            counter = 0
 
-                counter += 1
+            for protein_id, annotations in getattr(self, "interpro_annotations", {}).items():
+                for annotation in annotations:
+                    interpro_id = self.add_prefix_to_id("interpro", annotation.interpro_id)
+                    uniprot_id = self.add_prefix_to_id("uniprot", protein_id)
 
-            if self.early_stopping and counter >= self.early_stopping:
-                break
+                    props = {}
+                    if hasattr(annotation, 'start') and "start" in self.edge_fields:
+                        props["start"] = annotation.start
+                    if hasattr(annotation, 'end') and "end" in self.edge_fields:
+                        props["end"] = annotation.end
 
-        t1 = time()
-        logger.info(f"InterPro edges created in {round((t1-t0) / 60, 2)} mins")
+                    yield (None, uniprot_id, interpro_id, edge_label, props)
 
-        return edge_list
+                    counter += 1
+                    if self.early_stopping and counter >= self.early_stopping:
+                        break
+
+                if self.early_stopping and counter >= self.early_stopping:
+                    break
+
+            logger.info(f"Generated {counter} InterPro edges")
 
     @validate_call
     def check_length(self, element: str | list | int | float) -> str | list | int | float:

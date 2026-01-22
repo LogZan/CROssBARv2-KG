@@ -4,6 +4,7 @@ import numpy as np
 import time
 import collections
 from time import time
+import zlib
 
 from pypath.inputs import intact
 from pypath.inputs import string
@@ -731,7 +732,18 @@ class PPI:
                         f"Skipping this organism. Error: {e}"
                     )
                     continue
+                except zlib.error as e:
+                    logger.warning(
+                        f"Failed to process STRING data for organism {tax}: gzip decompression error. "
+                        f"Skipping this organism. Error: {e}"
+                    )
+                    continue
                 except (IndexError, ValueError) as e:
+                    logger.warning(
+                        f"Failed to process STRING data for organism {tax}: {e}. Skipping this organism."
+                    )
+                    continue
+                except Exception as e:
                     logger.warning(
                         f"Failed to process STRING data for organism {tax}: {e}. Skipping this organism."
                     )
