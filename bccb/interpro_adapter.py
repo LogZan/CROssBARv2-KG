@@ -469,10 +469,17 @@ class InterPro:
             logger.info("Streaming InterPro nodes from local file")
             counter = 0
 
+            file_size = os.path.getsize(self.entry_list_path)
+
             with open(self.entry_list_path, "r", encoding="utf-8") as fh:
-                with tqdm(desc="Processing InterPro nodes", unit=" lines", unit_scale=True) as pbar:
+                with tqdm(total=file_size, unit='B', unit_scale=True, unit_divisor=1024,
+                         desc="Processing InterPro nodes") as pbar:
+                    bytes_since_update = 0
                     header = True
                     for line in fh:
+                        line_bytes = len(line.encode('utf-8'))
+                        bytes_since_update += line_bytes
+
                         line = line.rstrip("\n")
                         if not line:
                             continue
@@ -498,14 +505,15 @@ class InterPro:
 
                         # Update progress bar every 1000 lines
                         if counter % 1000 == 0:
-                            pbar.update(1000)
+                            pbar.update(bytes_since_update)
+                            bytes_since_update = 0
 
                         if self.early_stopping and counter >= self.early_stopping:
                             break
 
-                    # Final update for remaining lines
-                    if counter % 1000 != 0:
-                        pbar.update(counter % 1000)
+                    # Final update for remaining bytes
+                    if bytes_since_update > 0:
+                        pbar.update(bytes_since_update)
 
             logger.info(f"Streamed {counter} InterPro nodes")
         else:
@@ -550,9 +558,16 @@ class InterPro:
             max_proteins = 100 if self.test_mode else None
             seen_proteins = set()
 
+            file_size = os.path.getsize(self.protein2ipr_path)
+
             with open(self.protein2ipr_path, "rt", encoding="utf-8") as fh:
-                with tqdm(desc="Processing protein-domain edges", unit=" lines", unit_scale=True) as pbar:
+                with tqdm(total=file_size, unit='B', unit_scale=True, unit_divisor=1024,
+                         desc="Processing protein-domain edges") as pbar:
+                    bytes_since_update = 0
                     for line in fh:
+                        line_bytes = len(line.encode('utf-8'))
+                        bytes_since_update += line_bytes
+
                         line = line.rstrip("\n")
                         if not line:
                             continue
@@ -585,14 +600,15 @@ class InterPro:
 
                         # Update progress bar every 10k lines
                         if counter % 10000 == 0:
-                            pbar.update(10000)
+                            pbar.update(bytes_since_update)
+                            bytes_since_update = 0
 
                         if self.early_stopping and counter >= self.early_stopping:
                             break
 
-                    # Final update for remaining lines
-                    if counter % 10000 != 0:
-                        pbar.update(counter % 10000)
+                    # Final update for remaining bytes
+                    if bytes_since_update > 0:
+                        pbar.update(bytes_since_update)
 
             logger.info(f"Streamed {counter} InterPro edges")
         else:
@@ -643,7 +659,7 @@ class InterPro:
         Adds prefix to ids
         """
         if self.add_prefix:
-            return normalize_curie(prefix + sep + identifier)
+            return prefix + sep + identifier
 
         return identifier
 
