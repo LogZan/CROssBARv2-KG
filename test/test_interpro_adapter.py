@@ -29,18 +29,20 @@ from bccb.interpro_adapter import InterPro
 CACHE = True
 TEST_MODE = True
 USE_EMBEDDINGS = False  # Set to True to test with embeddings
+INTERPRO_DATA_DIR = '/GenSIvePFS/users/data/InterPro/107.0'  # Local InterPro data directory
 
 
 def test_reviewed_api_10_proteins():
-    """Test reviewed InterPro API in test mode (download + parse)."""
+    """Test local file mode in test mode."""
     print("=" * 60)
-    print("Testing InterPro API (reviewed, test mode)")
+    print("Testing InterPro Local File Mode (test mode)")
     print("=" * 60)
 
     try:
         interpro_adapter = InterPro(
             organism="*",
-            test_mode=TEST_MODE
+            test_mode=TEST_MODE,
+            data_dir=INTERPRO_DATA_DIR
         )
 
         print("\nDownloading reviewed proteins (test mode)...")
@@ -93,7 +95,8 @@ def test_interpro_download():
     try:
         interpro_adapter = InterPro(
             organism="*",
-            test_mode=TEST_MODE
+            test_mode=TEST_MODE,
+            data_dir=INTERPRO_DATA_DIR
         )
 
         print("\nDownloading InterPro data...")
@@ -128,7 +131,8 @@ def test_domain_node_download():
     try:
         interpro_adapter = InterPro(
             organism="*",
-            test_mode=TEST_MODE
+            test_mode=TEST_MODE,
+            data_dir=INTERPRO_DATA_DIR
         )
 
         print("\nDownloading InterPro data...")
@@ -174,7 +178,8 @@ def test_interpro_nodes():
     try:
         interpro_adapter = InterPro(
             organism="*",
-            test_mode=TEST_MODE
+            test_mode=TEST_MODE,
+            data_dir=INTERPRO_DATA_DIR
         )
 
         print("\nDownloading data...")
@@ -218,7 +223,8 @@ def test_interpro_edges():
     try:
         interpro_adapter = InterPro(
             organism="*",
-            test_mode=TEST_MODE
+            test_mode=TEST_MODE,
+            data_dir=INTERPRO_DATA_DIR
         )
 
         print("\nDownloading data...")

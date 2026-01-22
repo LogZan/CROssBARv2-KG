@@ -21,6 +21,7 @@ data_paths:
   uniprot_keywords_json: '/GenSIvePFS/users/data/UniProt/keywords_all_2025_12_25.json'
   embeddings_dir: '/GenSIvePFS/users/data/embeddings'
   malacards_dir: '/GenSIvePFS/users/data/malacards'
+  interpro_dir: '/GenSIvePFS/users/data/InterPro/107.0'
 
 # Embedding file names (relative to embeddings_dir)
 embeddings:

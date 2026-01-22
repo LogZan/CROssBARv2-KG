@@ -163,6 +163,7 @@ timestamp = datetime.now(TZ).strftime("%Y%m%d%H%M%S")
 embeddings_dir = config['data_paths']['embeddings_dir']
 malacards_dir_path = config['data_paths']['malacards_dir']
 uniprot_json_path = config['data_paths']['uniprot_json']
+interpro_dir_path = config['data_paths']['interpro_dir']
 
 # Embedding file paths
 prott5_embedding_path = f"{embeddings_dir}/{config['embeddings']['prott5']}"
@@ -428,7 +429,8 @@ run_adapter("ppi", run_ppi)
 def run_interpro():
     interpro_adapter = InterPro(
         organism=ORGANISM,
-        test_mode=TEST_MODE
+        test_mode=TEST_MODE,
+        data_dir=interpro_dir_path
     )
 
     interpro_adapter.download_interpro_data(cache=CACHE)

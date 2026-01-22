@@ -9,7 +9,6 @@ import pandas as pd
 import numpy as np
 import gc
 import requests
-import gzip
 
 from pypath.share import curl, settings
 from pypath.inputs import interpro
@@ -128,6 +127,7 @@ class InterProModel(BaseModel):
     node_fields: Union[list[InterProNodeField], None] = None
     edge_fields: Union[list[InterProEdgeField], None] = None
     test_mode: bool = False
+    data_dir: str | None = None
 
 
 class InterPro:
@@ -144,16 +144,17 @@ class InterPro:
         node_fields: Optional[Union[list[InterProNodeField], None]] = None,
         edge_fields: Optional[Union[list[InterProEdgeField], None]] = None,
         test_mode: Optional[bool] = False,
+        data_dir: Optional[str] = None,
     ):
         """
         Args:
-            retries: number of retries in case of download error.
             page_size: page size of downloaded annotation data
-            organism: rganism code in NCBI taxid format, e.g. "9606" for human. If it is None or "*", downloads all organism data.
+            organism: organism code in NCBI taxid format, e.g. "9606" for human. If it is None or "*", downloads all organism data.
             add_prefix: if True, add prefix to database identifiers
             node_fields: `InterProNodeField` fields to be used in the graph, if it is None, select all fields.
             edge_fields: `InterProEdgeField` fields to be used in the graph, if it is None, select all fields.
             test_mode: limits amount of data for testing
+            data_dir: directory containing InterPro data files (protein2ipr.dat, entry.list)
         """
 
         model = InterProModel(
@@ -163,6 +164,7 @@ class InterPro:
             node_fields=node_fields,
             edge_fields=edge_fields,
             test_mode=test_mode,
+            data_dir=data_dir,
         ).model_dump()
 
         self.page_size = model["page_size"]
@@ -171,6 +173,7 @@ class InterPro:
         )
         self.add_prefix = model["add_prefix"]
         self.test_mode = model["test_mode"]
+        self.data_dir = model["data_dir"]
 
         # set node and edge fields
         self.set_node_and_edge_fields(
@@ -236,19 +239,12 @@ class InterPro:
         self.interpro_external_xrefs = {}
         self.interpro_structural_xrefs = {}
 
-        # If cache=True and local FTP files exist, use them instead of the API
-        if cache:
-            local_dir = os.environ.get(
-                "INTERPRO_DATA_DIR",
-                "/GenSIvePFS/users/data/InterPro/107.0",
-            )
-            protein2ipr_path = os.path.join(local_dir, "protein2ipr.dat.gz")
-            entry_list_path = os.path.join(local_dir, "entry.list")
+        # If cache=True and data_dir is provided, use local files
+        if cache and self.data_dir:
+            protein2ipr_path = os.path.join(self.data_dir, "protein2ipr.dat")
+            entry_list_path = os.path.join(self.data_dir, "entry.list")
             if os.path.exists(protein2ipr_path) and os.path.exists(entry_list_path):
-                logger.info(
-                    "Using local InterPro files from %s (cache=True)",
-                    local_dir,
-                )
+                logger.info(f"Using local InterPro files from {self.data_dir}")
                 self._load_interpro_from_local_files(
                     protein2ipr_path=protein2ipr_path,
                     entry_list_path=entry_list_path,
@@ -390,7 +386,7 @@ class InterPro:
         """Save file paths for streaming access - no data loaded into memory."""
         self.protein2ipr_path = protein2ipr_path
         self.entry_list_path = entry_list_path
-        logger.info("InterPro file paths saved for streaming access")
+        logger.info(f"InterPro file paths saved for streaming access: {protein2ipr_path}")
 
     def _fetch_json(self, url: str, cache: bool, cache_dir: str, tax_label: str | None = None) -> dict:
         """Fetch JSON with optional file cache under the InterPro cache dir."""
@@ -474,32 +470,42 @@ class InterPro:
             counter = 0
 
             with open(self.entry_list_path, "r", encoding="utf-8") as fh:
-                header = True
-                for line in fh:
-                    line = line.rstrip("\n")
-                    if not line:
-                        continue
-                    if header:
-                        header = False
-                        continue
-                    parts = line.split("\t")
-                    if len(parts) < 3:
-                        continue
+                with tqdm(desc="Processing InterPro nodes", unit=" lines", unit_scale=True) as pbar:
+                    header = True
+                    for line in fh:
+                        line = line.rstrip("\n")
+                        if not line:
+                            continue
+                        if header:
+                            header = False
+                            continue
+                        parts = line.split("\t")
+                        if len(parts) < 3:
+                            continue
 
-                    entry_id, entry_type, entry_name = parts[0], parts[1], parts[2]
-                    domain_id = self.add_prefix_to_id("interpro", entry_id)
+                        entry_id, entry_type, entry_name = parts[0], parts[1], parts[2]
+                        domain_id = self.add_prefix_to_id("interpro", entry_id)
 
-                    props = {}
-                    if InterProNodeField.NAME.value in self.node_fields:
-                        props["name"] = entry_name.replace("'", "^").replace("|", ",") if entry_name else None
-                    if InterProNodeField.TYPE.value in self.node_fields:
-                        props["type"] = entry_type
+                        props = {}
+                        if InterProNodeField.NAME.value in self.node_fields:
+                            props["name"] = entry_name.replace("'", "^").replace("|", ",") if entry_name else None
+                        if InterProNodeField.TYPE.value in self.node_fields:
+                            props["type"] = entry_type
 
-                    yield (domain_id, node_label, props)
+                        yield (domain_id, node_label, props)
 
-                    counter += 1
-                    if self.early_stopping and counter >= self.early_stopping:
-                        break
+                        counter += 1
+
+                        # Update progress bar every 1000 lines
+                        if counter % 1000 == 0:
+                            pbar.update(1000)
+
+                        if self.early_stopping and counter >= self.early_stopping:
+                            break
+
+                    # Final update for remaining lines
+                    if counter % 1000 != 0:
+                        pbar.update(counter % 1000)
 
             logger.info(f"Streamed {counter} InterPro nodes")
         else:
@@ -544,39 +550,49 @@ class InterPro:
             max_proteins = 100 if self.test_mode else None
             seen_proteins = set()
 
-            with gzip.open(self.protein2ipr_path, "rt", encoding="utf-8") as fh:
-                for line in fh:
-                    line = line.rstrip("\n")
-                    if not line:
-                        continue
-                    parts = line.split("\t")
-                    if len(parts) < 6:
-                        continue
+            with open(self.protein2ipr_path, "rt", encoding="utf-8") as fh:
+                with tqdm(desc="Processing protein-domain edges", unit=" lines", unit_scale=True) as pbar:
+                    for line in fh:
+                        line = line.rstrip("\n")
+                        if not line:
+                            continue
+                        parts = line.split("\t")
+                        if len(parts) < 6:
+                            continue
 
-                    protein_id, entry_id, entry_name, _, start, end = parts[:6]
-                    protein_id = protein_id.upper()
+                        protein_id, entry_id, entry_name, _, start, end = parts[:6]
+                        protein_id = protein_id.upper()
 
-                    # Early stopping for test mode
-                    if max_proteins is not None:
-                        if protein_id not in seen_proteins:
-                            if len(seen_proteins) >= max_proteins:
-                                break
-                            seen_proteins.add(protein_id)
+                        # Early stopping for test mode
+                        if max_proteins is not None:
+                            if protein_id not in seen_proteins:
+                                if len(seen_proteins) >= max_proteins:
+                                    break
+                                seen_proteins.add(protein_id)
 
-                    interpro_id = self.add_prefix_to_id("interpro", entry_id)
-                    uniprot_id = self.add_prefix_to_id("uniprot", protein_id)
+                        interpro_id = self.add_prefix_to_id("interpro", entry_id)
+                        uniprot_id = self.add_prefix_to_id("uniprot", protein_id)
 
-                    props = {}
-                    if "start" in self.edge_fields:
-                        props["start"] = int(start) if start.isdigit() else start
-                    if "end" in self.edge_fields:
-                        props["end"] = int(end) if end.isdigit() else end
+                        props = {}
+                        if "start" in self.edge_fields:
+                            props["start"] = int(start) if start.isdigit() else start
+                        if "end" in self.edge_fields:
+                            props["end"] = int(end) if end.isdigit() else end
 
-                    yield (None, uniprot_id, interpro_id, edge_label, props)
+                        yield (None, uniprot_id, interpro_id, edge_label, props)
 
-                    counter += 1
-                    if self.early_stopping and counter >= self.early_stopping:
-                        break
+                        counter += 1
+
+                        # Update progress bar every 10k lines
+                        if counter % 10000 == 0:
+                            pbar.update(10000)
+
+                        if self.early_stopping and counter >= self.early_stopping:
+                            break
+
+                    # Final update for remaining lines
+                    if counter % 10000 != 0:
+                        pbar.update(counter % 10000)
 
             logger.info(f"Streamed {counter} InterPro edges")
         else:
