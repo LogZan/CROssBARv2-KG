@@ -409,8 +409,9 @@ class PPI:
         t0 = time()
 
         # download biogrid data
+        limit = 100 if self.test_mode else 9999999999
         self.biogrid_ints = biogrid.biogrid_all_interactions(
-            self.organism, 9999999999, False
+            self.organism, limit, False
         )
 
         # download these fields for mapping from gene symbol to uniprot id
@@ -453,9 +454,6 @@ class PPI:
         logger.info(
             f"BioGRID data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
-
-        if self.test_mode:
-            self.biogrid_ints = self.biogrid_ints[:100]
 
         self.check_status_and_properties["biogrid"]["downloaded"] = True
 
@@ -663,6 +661,9 @@ class PPI:
         if self.organism is None:
             string_species = string.string_species()
             self.tax_ids = list(string_species.keys())
+            # In test mode, only process first organism to avoid downloading all species
+            if self.test_mode:
+                self.tax_ids = self.tax_ids[:1]
         else:
             self.tax_ids = [self.organism]
 
@@ -754,9 +755,6 @@ class PPI:
         logger.info(
             f"STRING data is {action} in {round((t1-t0) / 60, 2)} mins"
         )
-
-        if self.test_mode:
-            self.string_ints = self.string_ints[:100]
 
         self.check_status_and_properties["string"]["downloaded"] = True
 

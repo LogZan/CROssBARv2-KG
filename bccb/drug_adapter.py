@@ -277,9 +277,14 @@ class Drug:
         """Lazy load swissprots to reduce memory usage at initialization."""
         if self._swissprots is None:
             logger.debug("Loading SwissProt IDs (lazy load)...")
-            self._swissprots = set(
+            swissprots_full = set(
                 uniprot._all_uniprots(organism="*", swissprot=True)
             )
+            if self.test_mode:
+                logger.info(f"Test mode: limiting SwissProt proteins to {self.early_stopping}")
+                self._swissprots = set(list(swissprots_full)[:self.early_stopping])
+            else:
+                self._swissprots = swissprots_full
             logger.debug(f"Loaded {len(self._swissprots)} SwissProt IDs")
         return self._swissprots
 

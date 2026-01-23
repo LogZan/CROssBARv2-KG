@@ -577,7 +577,13 @@ class GO:
                     self.swissprots = swissprots_full
                 logger.info(f"Using {len(self.swissprots)} SwissProt proteins")
 
-                if self.organism in ("*", None):
+                # In test mode, force specific organism to avoid downloading massive all-organisms file
+                organism_for_annots = self.organism
+                if self.early_stopping and self.organism in ("*", None):
+                    logger.info("Test mode: using human (9606) instead of all organisms to avoid large download")
+                    organism_for_annots = 9606
+
+                if organism_for_annots in ("*", None):
                     if not cache:
                         logger.debug(
                             "Started downloading Gene Ontology annotation data for all organisms"
@@ -662,14 +668,14 @@ class GO:
                         )
                 else:
                     logger.debug(
-                        f"Started downloading Gene Ontology annotation data for tax id {self.organism}"
+                        f"Started downloading Gene Ontology annotation data for tax id {organism_for_annots}"
                     )
 
                     # Use streaming method with filtering for memory efficiency
                     if self.early_stopping:
                         logger.info(f"Using streaming GO annotations with limit of {self.early_stopping} proteins")
                         self.go_annots = self._stream_go_annotations(
-                            organism=self.organism,
+                            organism=organism_for_annots,
                             fields=["qualifier", "go_id", "reference", "evidence_code"],
                             allowed_proteins=self.swissprots,
                             max_proteins=self.early_stopping,
@@ -678,7 +684,7 @@ class GO:
                         # Full mode - still use streaming but with swissprots filter
                         logger.info("Using streaming GO annotations with SwissProt filter")
                         self.go_annots = self._stream_go_annotations(
-                            organism=self.organism,
+                            organism=organism_for_annots,
                             fields=["qualifier", "go_id", "reference", "evidence_code"],
                             allowed_proteins=self.swissprots,
                             max_proteins=None,
@@ -992,7 +998,7 @@ class GO:
 
             self.protein_to_go_edges = []
 
-            if self.organism in ("*", None):
+            if hasattr(self, 'go_annots_df'):
                 for index, row in tqdm(
                     self.go_annots_df.iterrows(),
                     total=self.go_annots_df.shape[0],
