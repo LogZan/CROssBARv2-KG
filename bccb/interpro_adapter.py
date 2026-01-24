@@ -541,7 +541,6 @@ class InterPro:
 
             logger.info(f"Generated {counter} InterPro nodes")
 
-    @validate_call
     def get_interpro_edges(
         self, edge_label: str = "protein_has_domain"
     ):
@@ -559,6 +558,11 @@ class InterPro:
             seen_proteins = set()
 
             file_size = os.path.getsize(self.protein2ipr_path)
+
+            # Pre-compute prefix settings for hot loop
+            use_prefix = self.add_prefix
+            check_start = "start" in self.edge_fields
+            check_end = "end" in self.edge_fields
 
             with open(self.protein2ipr_path, "rt", encoding="utf-8") as fh:
                 with tqdm(total=file_size, unit='B', unit_scale=True, unit_divisor=1024,
@@ -585,21 +589,26 @@ class InterPro:
                                     break
                                 seen_proteins.add(protein_id)
 
-                        interpro_id = self.add_prefix_to_id("interpro", entry_id)
-                        uniprot_id = self.add_prefix_to_id("uniprot", protein_id)
+                        # Inline prefix logic (avoid function call overhead)
+                        if use_prefix:
+                            interpro_id = f"interpro:{entry_id}"
+                            uniprot_id = f"uniprot:{protein_id}"
+                        else:
+                            interpro_id = entry_id
+                            uniprot_id = protein_id
 
                         props = {}
-                        if "start" in self.edge_fields:
+                        if check_start:
                             props["start"] = int(start) if start.isdigit() else start
-                        if "end" in self.edge_fields:
+                        if check_end:
                             props["end"] = int(end) if end.isdigit() else end
 
                         yield (None, uniprot_id, interpro_id, edge_label, props)
 
                         counter += 1
 
-                        # Update progress bar every 10k lines
-                        if counter % 10000 == 0:
+                        # Update progress bar every 100k lines (reduced overhead)
+                        if counter % 100000 == 0:
                             pbar.update(bytes_since_update)
                             bytes_since_update = 0
 
