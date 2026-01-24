@@ -5,6 +5,8 @@ import time
 import collections
 from time import time
 import zlib
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from multiprocessing import cpu_count
 
 from pypath.inputs import intact
 from pypath.inputs import string
@@ -26,6 +28,28 @@ from enum import Enum, EnumMeta
 
 from . import cache_config
 cache_config.setup_pypath_cache()
+
+
+def _get_optimal_workers(n_workers=None):
+    """
+    Auto-detect optimal number of worker processes.
+    
+    Args:
+        n_workers: User-specified number of workers.
+                  None = auto-detect, 1 = serial, >1 = parallel
+    
+    Returns:
+        int: Number of workers to use
+    """
+    if n_workers is not None:
+        return max(1, int(n_workers))
+    
+    # Auto-detect: use balanced strategy (50% of available CPUs, min 1, max 16)
+    available_cpus = cpu_count()
+    optimal = max(1, min(16, available_cpus // 2))
+    
+    logger.info(f"Auto-detected {optimal} workers (available CPUs: {available_cpus})")
+    return optimal
 
 
 class PPIEnumMeta(EnumMeta):
@@ -167,7 +191,7 @@ class PPI:
 
     @validate_call
     def download_ppi_data(self, cache: bool = False, debug: bool = False,
-                          retries: int = 6) -> None:
+                          retries: int = 6, n_workers: int = 1) -> None:
         """
         Wrapper function to download PPI data using pypath; used to access
         settings.
@@ -176,6 +200,8 @@ class PPI:
             forces download.
             debug: if True, turns on debug mode in pypath.
             retries: number of retries in case of download error.
+            n_workers: number of parallel workers for STRING data download.
+                      1 = serial (default), None = auto-detect, >1 = parallel
         """
         # Set adapter-specific cache directory
         cache_config.set_adapter_cache('ppi')
@@ -191,7 +217,7 @@ class PPI:
 
             self.download_intact_data(cache=cache)
             self.download_biogrid_data(cache=cache)
-            self.download_string_data(cache=cache)
+            self.download_string_data(cache=cache, n_workers=n_workers)
 
     def process_ppi_data(self) -> None:
         self.intact_process()
@@ -646,7 +672,52 @@ class PPI:
             "properties_dict"
         ] = self.biogrid_field_new_names
 
-    def download_string_data(self, cache: bool = False) -> None:
+    @staticmethod
+    def _process_single_organism(tax, string_to_uniprot, tax_ids_to_be_skipped):
+        """
+        Process STRING data for a single organism (designed for parallel execution).
+        
+        Note: Returns interaction objects directly. The objects must be picklable.
+        If not, this will be processed in the main process instead.
+        
+        Args:
+            tax: Taxonomy ID to process
+            string_to_uniprot: Dictionary mapping STRING IDs to UniProt IDs
+            tax_ids_to_be_skipped: List of problematic tax IDs to skip
+        
+        Returns:
+            tuple: (tax_id, interaction_count, error_message)
+                  If successful: (tax, count, None)
+                  If failed: (tax, 0, error_message)
+        """
+        if tax in tax_ids_to_be_skipped:
+            return (tax, 0, f"Skipped (in blocklist)")
+        
+        try:
+            # Fetch and filter interactions
+            # Count interactions instead of returning them (avoid pickle issues)
+            interaction_count = sum(
+                1
+                for i in string.string_links_interactions(
+                    ncbi_tax_id=int(tax),
+                    score_threshold="high_confidence",
+                )
+                if i.protein_a in string_to_uniprot
+                and i.protein_b in string_to_uniprot
+            )
+            
+            return (tax, interaction_count, None)
+            
+        except EOFError as e:
+            return (tax, 0, f"gzip file ended early (possibly truncated cache): {e}")
+        except zlib.error as e:
+            return (tax, 0, f"gzip decompression error: {e}")
+        except (IndexError, ValueError) as e:
+            return (tax, 0, f"Parsing error: {e}")
+        except Exception as e:
+            return (tax, 0, f"Unexpected error: {e}")
+
+    def download_string_data(self, cache: bool = False, n_workers: int = 1) -> None:
         """
         Wrapper function to download STRING data using pypath; used to access
         settings.
@@ -663,7 +734,7 @@ class PPI:
             self.tax_ids = list(string_species.keys())
             # In test mode, only process first organism to avoid downloading all species
             if self.test_mode:
-                self.tax_ids = self.tax_ids[:1]
+                self.tax_ids = self.tax_ids[:3]
         else:
             self.tax_ids = [self.organism]
 
@@ -701,54 +772,120 @@ class PPI:
 
         # Filter out problematic tax IDs
         valid_tax_ids = [tax for tax in self.tax_ids if tax not in tax_ids_to_be_skipped]
-
-        # it may take around 100 hours to download whole data
-        for tax in tqdm(self.tax_ids, desc="Retrieving STRING data"):
-            if tax not in tax_ids_to_be_skipped:
-                try:
-                    logger.debug(f"Processing STRING data for organism {tax}")
-                    # remove proteins that does not have swissprot ids
-                    organism_string_ints = [
-                        i
-                        for i in string.string_links_interactions(
-                            ncbi_tax_id=int(tax),
-                            score_threshold="high_confidence",
-                        )
-                        if i.protein_a in self.string_to_uniprot
-                        and i.protein_b in self.string_to_uniprot
-                    ]
-
-                    logger.debug(
-                        f"STRING data with taxonomy id {str(tax)}, filtered interaction count for this tax id is {len(organism_string_ints)}"
-                    )
-
-                    if organism_string_ints:
+        
+        # Determine number of workers
+        actual_workers = _get_optimal_workers(n_workers)
+        
+        # Process organisms: parallel if workers > 1, serial otherwise
+        if actual_workers > 1:
+            logger.info(f"Using parallel processing with {actual_workers} workers for {len(valid_tax_ids)} organisms")
+            
+            # Parallel processing: pre-warm cache and count interactions
+            # Then fetch in main process (fast since cached)
+            failed_organisms = []
+            organism_counts = {}
+            
+            with ProcessPoolExecutor(max_workers=actual_workers) as executor:
+                # Submit all tasks - these will populate cache
+                future_to_tax = {
+                    executor.submit(
+                        self._process_single_organism,
+                        tax,
+                        self.string_to_uniprot,
+                        tax_ids_to_be_skipped
+                    ): tax
+                    for tax in self.tax_ids
+                }
+                
+                # Collect results with progress bar
+                for future in tqdm(as_completed(future_to_tax), 
+                                 total=len(future_to_tax),
+                                 desc="Retrieving STRING data (parallel)"):
+                    tax_id, interaction_count, error_msg = future.result()
+                    
+                    if error_msg:
+                        logger.warning(f"Failed to process organism {tax_id}: {error_msg}")
+                        failed_organisms.append((tax_id, error_msg))
+                    else:
+                        organism_counts[tax_id] = interaction_count
+            
+            # Now fetch actual interactions in main process (fast, data is cached)
+            logger.info("Fetching interaction objects from cache...")
+            for tax in tqdm(self.tax_ids, desc="Loading cached interactions"):
+                if tax in organism_counts and organism_counts[tax] > 0:
+                    try:
+                        organism_string_ints = [
+                            i
+                            for i in string.string_links_interactions(
+                                ncbi_tax_id=int(tax),
+                                score_threshold="high_confidence",
+                            )
+                            if i.protein_a in self.string_to_uniprot
+                            and i.protein_b in self.string_to_uniprot
+                        ]
+                        
                         self.string_ints.extend(organism_string_ints)
                         logger.debug(
-                            f"Total interaction count is {len(self.string_ints)}"
+                            f"STRING data for {tax}: {len(organism_string_ints)} interactions "
+                            f"(total: {len(self.string_ints)})"
                         )
-                except EOFError as e:
-                    logger.warning(
-                        f"Failed to process STRING data for organism {tax}: gzip file ended early (possibly truncated cache). "
-                        f"Skipping this organism. Error: {e}"
-                    )
-                    continue
-                except zlib.error as e:
-                    logger.warning(
-                        f"Failed to process STRING data for organism {tax}: gzip decompression error. "
-                        f"Skipping this organism. Error: {e}"
-                    )
-                    continue
-                except (IndexError, ValueError) as e:
-                    logger.warning(
-                        f"Failed to process STRING data for organism {tax}: {e}. Skipping this organism."
-                    )
-                    continue
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to process STRING data for organism {tax}: {e}. Skipping this organism."
-                    )
-                    continue
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch cached data for {tax}: {e}")
+            
+            if failed_organisms:
+                logger.warning(
+                    f"Failed to process {len(failed_organisms)} organisms out of {len(self.tax_ids)}"
+                )
+        else:
+            logger.info(f"Using serial processing for {len(valid_tax_ids)} organisms")
+            
+            # Serial processing (original logic)
+            for tax in tqdm(self.tax_ids, desc="Retrieving STRING data"):
+                if tax not in tax_ids_to_be_skipped:
+                    try:
+                        logger.debug(f"Processing STRING data for organism {tax}")
+                        # remove proteins that does not have swissprot ids
+                        organism_string_ints = [
+                            i
+                            for i in string.string_links_interactions(
+                                ncbi_tax_id=int(tax),
+                                score_threshold="high_confidence",
+                            )
+                            if i.protein_a in self.string_to_uniprot
+                            and i.protein_b in self.string_to_uniprot
+                        ]
+
+                        logger.debug(
+                            f"STRING data with taxonomy id {str(tax)}, filtered interaction count for this tax id is {len(organism_string_ints)}"
+                        )
+
+                        if organism_string_ints:
+                            self.string_ints.extend(organism_string_ints)
+                            logger.debug(
+                                f"Total interaction count is {len(self.string_ints)}"
+                            )
+                    except EOFError as e:
+                        logger.warning(
+                            f"Failed to process STRING data for organism {tax}: gzip file ended early (possibly truncated cache). "
+                            f"Skipping this organism. Error: {e}"
+                        )
+                        continue
+                    except zlib.error as e:
+                        logger.warning(
+                            f"Failed to process STRING data for organism {tax}: gzip decompression error. "
+                            f"Skipping this organism. Error: {e}"
+                        )
+                        continue
+                    except (IndexError, ValueError) as e:
+                        logger.warning(
+                            f"Failed to process STRING data for organism {tax}: {e}. Skipping this organism."
+                        )
+                        continue
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to process STRING data for organism {tax}: {e}. Skipping this organism."
+                        )
+                        continue
 
         t1 = time()
         action = "retrieved" if cache else "downloaded"

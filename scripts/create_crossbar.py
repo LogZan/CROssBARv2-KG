@@ -416,7 +416,7 @@ def run_ppi():
                       export_csv=export_as_csv,
                       test_mode=TEST_MODE)
 
-    ppi_adapter.download_ppi_data(cache=CACHE)
+    ppi_adapter.download_ppi_data(cache=CACHE, n_workers=96)
     ppi_adapter.process_ppi_data()
     bc.write_edges(ppi_adapter.get_ppi_edges())
 
