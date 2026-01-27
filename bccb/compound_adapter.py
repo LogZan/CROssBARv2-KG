@@ -5,6 +5,7 @@ import gc
 import collections
 import h5py
 import gzip
+import zlib
 
 from pypath.share import curl, settings, common
 from pypath.inputs import stitch, uniprot, string
@@ -208,7 +209,7 @@ class Compound:
                 self.retrieve_selformer_embeddings(
                     selformer_embedding_path=selformer_embedding_path
                 )
-            self.download_stitch_cti_data()
+            self.download_stitch_cti_data(cache=cache)
 
             t1 = time()
             action = "retrieved" if cache else "downloaded"
@@ -495,6 +496,7 @@ class Compound:
     @validate_call
     def download_stitch_cti_data(
         self,
+        cache: bool = False,
         score_threshold: (
             int
             | Literal[
@@ -583,7 +585,7 @@ class Compound:
                 if organism_stitch_ints:
                     self.stitch_ints.extend(organism_stitch_ints)
 
-            except (TypeError, gzip.BadGzipFile) as e:  #'NoneType' object is not an iterator
+            except (TypeError, gzip.BadGzipFile, zlib.error) as e:  #'NoneType' object is not an iterator
 
                 logger.debug(
                     f"Error: {e}. Skipped tax id {tax}. This is most likely due to the empty file in database. Check the database file."

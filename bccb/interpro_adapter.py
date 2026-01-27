@@ -688,6 +688,8 @@ class InterPro:
             self.edge_fields = [field.value for field in InterProEdgeField]
 
     def export_as_csv(self, path: DirectoryPath | None = None):
+        import csv
+        
         if path:
             node_full_path = os.path.join(path, "Domain.csv")
             edge_full_path = os.path.join(path, "Protein_has_domain.csv")
@@ -695,7 +697,7 @@ class InterPro:
             node_full_path = os.path.join(os.getcwd(), "Domain.csv")
             edge_full_path = os.path.join(os.getcwd(), "Protein_has_domain.csv")
 
-        # write nodes
+        # write nodes (small dataset, can use pandas)
         nodes = self.get_interpro_nodes()
         node_df_list = []
         for n in nodes:
@@ -707,14 +709,21 @@ class InterPro:
         nodes_df.to_csv(node_full_path, index=False)
         logger.info(f"Domain node data is written: {node_full_path}")
 
-        # write edges
+        # write edges (large dataset, stream to CSV to avoid OOM)
         edges = self.get_interpro_edges()
-        edges_df_list = []
-        for e in edges:
-            props = {"source_id": e[1], "target_id": e[2]}
-            props |= e[4]
-            edges_df_list.append(props)
-
-        edges_df = pd.DataFrame.from_records(edges_df_list)
-        edges_df.to_csv(edge_full_path, index=False)
-        logger.info(f"Domain edge data is written: {edge_full_path}")
+        edge_count = 0
+        
+        with open(edge_full_path, 'w', newline='', encoding='utf-8') as f:
+            writer = None
+            for e in edges:
+                props = {"source_id": e[1], "target_id": e[2]}
+                props |= e[4]
+                
+                if writer is None:
+                    writer = csv.DictWriter(f, fieldnames=list(props.keys()))
+                    writer.writeheader()
+                
+                writer.writerow(props)
+                edge_count += 1
+        
+        logger.info(f"Domain edge data is written: {edge_full_path} ({edge_count:,} edges)")

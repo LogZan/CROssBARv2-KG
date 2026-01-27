@@ -1283,13 +1283,15 @@ class Drug:
                 else:
                     level = interaction.level
 
-                if isinstance(interaction.actions, tuple):
-                    if len(interaction.actions) > 1:
-                        actions = "|".join(list(interaction.actions))
+                # ddinter interactions in newer pypath versions may not have "actions"
+                actions_attr = getattr(interaction, "actions", None)
+                if isinstance(actions_attr, tuple):
+                    if len(actions_attr) > 1:
+                        actions = "|".join(list(actions_attr))
                     else:
-                        actions = list(interaction.actions)[0]
+                        actions = list(actions_attr)[0]
                 else:
-                    actions = interaction.actions
+                    actions = actions_attr
 
                 df_list.append(
                     (

@@ -200,6 +200,73 @@ def organism_for_all_uniprots(organism):
     return organism
 
 
+# Helper for chunked edge writing to avoid OOM with large generators
+def write_edges_chunked(bc, edge_generator, chunk_size=1000000):
+    """Write edges in chunks to avoid BioCypher's list(edges) OOM issue.
+    
+    BioCypher's _batch_writer.py does `edges = list(edges)` which loads
+    entire generator into memory. For large datasets (e.g., 77GB InterPro),
+    this causes OOM. 
+    
+    WORKAROUND: We patch BioCypher's batch_writer to not call list() on 
+    the entire generator. Instead, we pass a streaming generator directly.
+    BioCypher will then batch by its internal batch_size (chunk_size param).
+    """
+    from biocypher.output.write._batch_writer import _BatchWriter
+    from biocypher._create import BioCypherRelAsNode
+    from biocypher._logger import logger
+    from more_itertools import peekable
+    
+    # Monkey-patch write_edges to skip list() conversion
+    original_write_edges = _BatchWriter.write_edges
+    
+    def patched_write_edges(self, edges, batch_size=int(1e6)):
+        """Patched version that doesn't convert generator to list."""
+        edges = peekable(edges)
+        try:
+            edges.peek()
+        except StopIteration:
+            logger.debug("No edges to write.")
+            return True
+        
+        nodes_flat = []
+        
+        def edge_stream():
+            for edge in edges:
+                if isinstance(edge, BioCypherRelAsNode):
+                    if self.deduplicator.rel_as_node_seen(edge):
+                        continue
+                    nodes_flat.append(edge.get_node())
+                    yield edge.get_source_edge()
+                    yield edge.get_target_edge()
+                else:
+                    if self.deduplicator.edge_seen(edge):
+                        continue
+                    yield edge
+        
+        passed = self._write_edge_data(edge_stream(), batch_size)
+        
+        if nodes_flat:
+            self.write_nodes(nodes_flat)
+        
+        if not passed:
+            logger.error("Error while writing edge data.")
+            return False
+            
+        passed = self._write_edge_headers()
+        if not passed:
+            logger.error("Error while writing edge headers.")
+            return False
+        return True
+    
+    # Apply patch and write edges
+    _BatchWriter.write_edges = patched_write_edges
+    try:
+        bc.write_edges(edge_generator, batch_size=chunk_size)
+    finally:
+        _BatchWriter.write_edges = original_write_edges
+
+
 # Helper for consistent logging
 def log_adapter_boundary(adapter_name: str, phase: str):
     """Log adapter execution boundary."""
@@ -437,7 +504,7 @@ def run_interpro():
     interpro_adapter.download_domain_node_data(dom2vec_embedding_path=dom2vec_domain_embedding_path if USE_EMBEDDINGS else None, cache=CACHE)
 
     bc.write_nodes(interpro_adapter.get_interpro_nodes())
-    bc.write_edges(interpro_adapter.get_interpro_edges())
+    write_edges_chunked(bc, interpro_adapter.get_interpro_edges())
 
     if export_as_csv:
         interpro_adapter.export_as_csv(path=output_dir_path)
