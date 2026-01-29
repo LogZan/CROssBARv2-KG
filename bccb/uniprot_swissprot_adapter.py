@@ -685,7 +685,7 @@ class UniprotSwissprot:
                 for loc_data in comment.get("subcellularLocations", []):
                     loc = loc_data.get("location", {}).get("value")
                     if loc:
-                        locations.append(loc.replace("'", "").strip())
+                        locations.append(loc.replace("'", "^").strip())
         return locations
 
     def _find_ensg_from_enst(self, enst_list):
@@ -975,6 +975,8 @@ class UniprotSwissprot:
         for protein in tqdm(self.uniprot_ids, desc="Processing proteins"):
             protein_id = self.add_prefix_to_id("uniprot", protein)
             _props = {arg: self.data.get(arg, {}).get(protein) for arg in self.node_fields}
+            for k, v in _props.items():
+                _props[k] = self._sanitize_value(v)
             yield protein_id, _props
 
     @validate_call
@@ -1148,6 +1150,22 @@ class UniprotSwissprot:
         if value is None:
             return []
         return [value] if isinstance(value, (str, int)) else list(value)
+
+    def _sanitize_value(self, value):
+        """Replace admin-import sensitive characters in UniProt values."""
+        if value is None:
+            return value
+        if isinstance(value, str):
+            return value.replace("|", ",").replace("'", "^").strip()
+        if isinstance(value, list):
+            sanitized = []
+            for item in value:
+                if isinstance(item, str):
+                    sanitized.append(item.replace("|", ",").replace("'", "^").strip())
+                else:
+                    sanitized.append(item)
+            return sanitized
+        return value
 
     @validate_call
     def export_data_to_csv(
@@ -1708,4 +1726,3 @@ class UniprotSwissprot:
         yield from self.get_feature_edges()
         yield from self.get_disease_edges()
         yield from self.get_interaction_edges()
-

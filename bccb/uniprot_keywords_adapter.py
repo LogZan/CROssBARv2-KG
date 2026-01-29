@@ -165,6 +165,22 @@ class UniprotKeywords:
         msg = f"Loaded {len(self.keywords_data)} keywords in {round((t1-t0), 2)} seconds."
         logger.info(msg)
 
+    def _sanitize_value(self, value):
+        """Replace admin-import sensitive characters in keyword values."""
+        if value is None:
+            return value
+        if isinstance(value, str):
+            return value.replace("|", ",").replace("'", "^").strip()
+        if isinstance(value, list):
+            sanitized = []
+            for item in value:
+                if isinstance(item, str):
+                    sanitized.append(item.replace("|", ",").replace("'", "^").strip())
+                else:
+                    sanitized.append(item)
+            return sanitized
+        return value
+
     @validate_call
     def get_nodes(
         self,
@@ -199,20 +215,20 @@ class UniprotKeywords:
 
             # Add properties based on node_fields
             if KeywordNodeField.NAME.value in self.node_fields:
-                props["name"] = kw_name
+                props["name"] = self._sanitize_value(kw_name)
 
             if KeywordNodeField.DEFINITION.value in self.node_fields:
-                props["definition"] = entry.get("definition")
+                props["definition"] = self._sanitize_value(entry.get("definition"))
 
             if KeywordNodeField.CATEGORY.value in self.node_fields:
                 category = entry.get("category", {})
-                props["category"] = category.get("name")
+                props["category"] = self._sanitize_value(category.get("name"))
 
             if KeywordNodeField.SYNONYMS.value in self.node_fields:
-                props["synonyms"] = entry.get("synonyms", [])
+                props["synonyms"] = self._sanitize_value(entry.get("synonyms", []))
 
             if KeywordNodeField.LINKS.value in self.node_fields:
-                props["links"] = entry.get("links", [])
+                props["links"] = self._sanitize_value(entry.get("links", []))
 
             if KeywordNodeField.REVIEWED_PROTEIN_COUNT.value in self.node_fields:
                 stats = entry.get("statistics", {})
