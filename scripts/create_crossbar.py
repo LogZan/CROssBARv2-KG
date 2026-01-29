@@ -1,9 +1,14 @@
 import os
 import sys
 import gc
+import csv
+import json
+import re
 import yaml
 import ctypes
 import argparse
+import logging
+from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -34,10 +39,15 @@ parser.add_argument('--no-checkpoint', action='store_true', help='Ignore checkpo
 parser.add_argument('--skip-until', type=str, help='Skip adapters until reaching specified adapter')
 parser.add_argument('--only', type=str, help='Only run specified adapters (comma-separated)')
 parser.add_argument('--reset-checkpoint', action='store_true', help='Clear checkpoint and restart')
+parser.add_argument('--stats-version', type=str, help='Stats output version (defaults to output_dir basename)')
+parser.add_argument('--stats-only', action='store_true', help='Only compute stats from existing output, do not run adapters')
 args = parser.parse_args()
 
 # Calculate output_dir_path from config
 output_dir_path = str(project_root / crossbar_config['settings'].get('output_dir', 'biocypher-out'))
+stats_version = args.stats_version or Path(output_dir_path).name
+stats_dir = project_root / "stats" / stats_version
+stats_dir.mkdir(parents=True, exist_ok=True)
 
 # Initialize checkpoint manager
 checkpoint_enabled = crossbar_config.get('checkpoint', {}).get('enabled', True) and not args.no_checkpoint
@@ -281,19 +291,458 @@ def log_adapter_boundary(adapter_name: str, phase: str):
         print(f"{separator}\n")
 
 
+STATS_LOGGER = logging.getLogger("crossbar_stats")
+if not STATS_LOGGER.handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[{asctime}] [STATS] {message}",
+        style="{",
+    )
+
+ADAPTER_ORDER = [
+    "uniprot",
+    "keywords",
+    "ppi",
+    "interpro",
+    "go",
+    "drug",
+    "compound",
+    "orthology",
+    "disease",
+    "phenotype",
+    "pathway",
+    "side_effect",
+    "ec",
+    "tfgene",
+]
+
+ADAPTER_DISPLAY_NAMES = {
+    "uniprot": "UniProtKB-SwissProt",
+    "keywords": "UniProtKB-Keywords",
+    "ppi": "PPI",
+    "interpro": "InterPro",
+    "go": "Gene Ontology",
+    "drug": "Drug",
+    "compound": "Compound",
+    "orthology": "Orthology",
+    "disease": "Disease",
+    "phenotype": "Phenotype",
+    "pathway": "Pathway",
+    "side_effect": "Side Effect",
+    "ec": "EC",
+    "tfgene": "TFgene",
+}
+
+HEADER_SUFFIX = "-header.csv"
+PART_RE = re.compile(r"^(?P<base>.+)-part\d+\.csv$")
+
+
+def _snapshot_csv_files(dir_path: str) -> dict:
+    snapshot = {}
+    for path in Path(dir_path).glob("*.csv"):
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            continue
+        snapshot[path.name] = (stat.st_size, stat.st_mtime)
+    return snapshot
+
+
+def _diff_csv_files(before: dict, after: dict) -> list:
+    changed = []
+    for name, meta in after.items():
+        if name not in before or before[name] != meta:
+            changed.append(name)
+    return sorted(changed)
+
+
+def _derive_type_name(filename: str) -> str:
+    if filename.endswith(HEADER_SUFFIX):
+        return filename[:-len(HEADER_SUFFIX)]
+    match = PART_RE.match(filename)
+    if match:
+        return match.group("base")
+    if filename.endswith(".csv"):
+        return filename[:-4]
+    return filename
+
+
+def _is_header_file(filename: str) -> bool:
+    return filename.endswith(HEADER_SUFFIX)
+
+
+def _is_part_file(filename: str) -> bool:
+    return PART_RE.match(filename) is not None
+
+
+def _is_single_data_file(filename: str) -> bool:
+    return filename.endswith(".csv") and not _is_header_file(filename) and not _is_part_file(filename)
+
+
+def _read_header_columns(path: Path) -> list:
+    with path.open("r", encoding="utf-8") as f:
+        line = f.readline().rstrip("\n")
+    return line.split("\t") if line else []
+
+
+def _count_lines(path: Path) -> int:
+    count = 0
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            count += chunk.count(b"\n")
+    return count
+
+
+def _infer_type_kind(columns: list) -> str:
+    edge_markers = (":START_ID", ":END_ID", ":TYPE")
+    for col in columns:
+        if col.startswith(edge_markers):
+            return "edge"
+    return "node"
+
+
+def _parse_sources(raw: str) -> list:
+    raw = raw.strip()
+    if not raw:
+        return []
+    raw = raw.strip("\"' ")
+    if ";" in raw:
+        return [part.strip().strip("\"' ") for part in raw.split(";") if part.strip()]
+    return [raw]
+
+
+def _normalize_ppi_source(source: str) -> str:
+    normalized = source.strip().strip("\"' ")
+    upper = normalized.upper()
+    if upper == "INTACT":
+        return "PPI-IntAct"
+    if upper in ("BIOGRID", "BIOGRID "):
+        return "PPI-BioGrid"
+    if upper == "STRING":
+        return "PPI-STRING"
+    return ""
+
+
+class StatsManager:
+    def __init__(self, output_dir: str, stats_dir_path: Path, test_mode: bool):
+        self.output_dir = Path(output_dir)
+        self.stats_dir = stats_dir_path
+        self.mapping_path = self.stats_dir / "adapter_files.json"
+        self.adapter_files = {}
+        self.mapping_mode = False
+        self._snapshot_before = None
+
+        if self.mapping_path.exists():
+            self._load_mapping()
+        elif test_mode:
+            self.mapping_mode = True
+        else:
+            STATS_LOGGER.warning(
+                "adapter_files.json not found. Run once in test mode to generate mapping."
+            )
+
+    def _load_mapping(self):
+        with self.mapping_path.open("r", encoding="utf-8") as f:
+            self.adapter_files = json.load(f)
+
+    def _save_mapping(self):
+        with self.mapping_path.open("w", encoding="utf-8") as f:
+            json.dump(self.adapter_files, f, indent=2, sort_keys=True)
+
+    def on_adapter_start(self, adapter_name: str):
+        if self.mapping_mode:
+            self._snapshot_before = _snapshot_csv_files(str(self.output_dir))
+
+    def on_adapter_end(self, adapter_name: str):
+        if self.mapping_mode:
+            snapshot_after = _snapshot_csv_files(str(self.output_dir))
+            changed = _diff_csv_files(self._snapshot_before or {}, snapshot_after)
+            if changed:
+                self.adapter_files[adapter_name] = changed
+                self._save_mapping()
+        self.write_stats(current_adapter=adapter_name)
+
+    def _collect_type_info(self, adapter_name: str) -> dict:
+        files = self.adapter_files.get(adapter_name, [])
+        type_info = {}
+        for filename in files:
+            if not filename.endswith(".csv"):
+                continue
+            type_name = _derive_type_name(filename)
+            info = type_info.setdefault(
+                type_name,
+                {"all_files": [], "header_files": [], "data_files": []},
+            )
+            info["all_files"].append(filename)
+            if _is_header_file(filename):
+                info["header_files"].append(filename)
+            elif _is_part_file(filename) or _is_single_data_file(filename):
+                info["data_files"].append(filename)
+        return type_info
+
+    def _get_header_columns(self, type_name: str, info: dict) -> list:
+        if info["header_files"]:
+            header_path = self.output_dir / info["header_files"][0]
+            return _read_header_columns(header_path)
+        for data_file in info["data_files"]:
+            if _is_single_data_file(data_file):
+                return _read_header_columns(self.output_dir / data_file)
+        STATS_LOGGER.warning(f"No header found for type {type_name}")
+        return []
+
+    def _count_rows_and_size(self, info: dict) -> tuple:
+        row_count = 0
+        size_bytes = 0
+        for filename in info["data_files"]:
+            path = self.output_dir / filename
+            size_bytes += path.stat().st_size
+            lines = _count_lines(path)
+            if _is_single_data_file(filename):
+                row_count += max(0, lines - 1)
+            else:
+                row_count += lines
+        for filename in info["header_files"]:
+            size_bytes += (self.output_dir / filename).stat().st_size
+        return row_count, size_bytes
+
+    def _compute_schema_rows(self, adapter_name: str) -> list:
+        rows = []
+        type_info = self._collect_type_info(adapter_name)
+        for type_name, info in sorted(type_info.items()):
+            columns = self._get_header_columns(type_name, info)
+            type_kind = _infer_type_kind(columns)
+            row_count, size_bytes = self._count_rows_and_size(info)
+            rows.append(
+                {
+                    "adapter": ADAPTER_DISPLAY_NAMES.get(adapter_name, adapter_name),
+                    "type_name": type_name,
+                    "type_kind": type_kind,
+                    "count": row_count,
+                    "property_count": len(columns),
+                    "size_bytes": size_bytes,
+                }
+            )
+        return rows
+
+    def _compute_adapter_stats(self, adapter_name: str) -> dict:
+        type_info = self._collect_type_info(adapter_name)
+        nodes_count = 0
+        edges_count = 0
+        nodes_size = 0
+        edges_size = 0
+        for type_name, info in type_info.items():
+            columns = self._get_header_columns(type_name, info)
+            type_kind = _infer_type_kind(columns)
+            row_count, size_bytes = self._count_rows_and_size(info)
+            if type_kind == "edge":
+                edges_count += row_count
+                edges_size += size_bytes
+            else:
+                nodes_count += row_count
+                nodes_size += size_bytes
+        return {
+            "adapter": ADAPTER_DISPLAY_NAMES.get(adapter_name, adapter_name),
+            "nodes_count": nodes_count,
+            "edges_count": edges_count,
+            "nodes_size_bytes": nodes_size,
+            "edges_size_bytes": edges_size,
+            "total_size_bytes": nodes_size + edges_size,
+        }
+
+    def _compute_ppi_sources(self) -> list:
+        files = self.adapter_files.get("ppi", [])
+        if not files:
+            return []
+        type_info = self._collect_type_info("ppi")
+        ppi_info = type_info.get("Protein_interacts_with_protein")
+        if not ppi_info:
+            return []
+        columns = self._get_header_columns("Protein_interacts_with_protein", ppi_info)
+        source_idx = None
+        for idx, col in enumerate(columns):
+            if col == "source" or col.startswith("source"):
+                source_idx = idx
+                break
+        if source_idx is None:
+            STATS_LOGGER.warning("PPI source column not found.")
+            return []
+
+        counts = defaultdict(int)
+        sizes = defaultdict(int)
+        for filename in ppi_info["data_files"]:
+            path = self.output_dir / filename
+            with path.open("rb") as f:
+                for line in f:
+                    if not line:
+                        continue
+                    parts = line.rstrip(b"\n").split(b"\t")
+                    if source_idx >= len(parts):
+                        continue
+                    raw = parts[source_idx].decode("utf-8", "ignore")
+                    sources = [_normalize_ppi_source(s) for s in _parse_sources(raw)]
+                    sources = [s for s in sources if s]
+                    if not sources:
+                        continue
+                    size = len(line)
+                    size_base = size // len(sources)
+                    remainder = size % len(sources)
+                    for i, src in enumerate(sources):
+                        counts[src] += 1
+                        sizes[src] += size_base + (1 if i < remainder else 0)
+
+        rows = []
+        for src in ("PPI-IntAct", "PPI-BioGrid", "PPI-STRING"):
+            if src in counts:
+                rows.append(
+                    {
+                        "adapter": src,
+                        "nodes_count": 0,
+                        "edges_count": counts[src],
+                        "nodes_size_bytes": 0,
+                        "edges_size_bytes": sizes[src],
+                        "total_size_bytes": sizes[src],
+                    }
+                )
+        return rows
+
+    def _write_adapter_stats(self, adapter_rows: list):
+        path = self.stats_dir / "adapter_stats.csv"
+        with path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "adapter",
+                    "nodes_count",
+                    "edges_count",
+                    "nodes_size_bytes",
+                    "edges_size_bytes",
+                    "total_size_bytes",
+                ],
+            )
+            writer.writeheader()
+            writer.writerows(adapter_rows)
+
+    def _write_schema_stats(self, schema_rows: list):
+        path = self.stats_dir / "schema_stats.csv"
+        with path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "adapter",
+                    "type_name",
+                    "type_kind",
+                    "count",
+                    "property_count",
+                    "size_bytes",
+                ],
+            )
+            writer.writeheader()
+            writer.writerows(schema_rows)
+
+    def write_stats(self, current_adapter: str = ""):
+        if not self.adapter_files:
+            return
+
+        adapter_rows = []
+        schema_rows = []
+
+        for adapter_name in ADAPTER_ORDER:
+            if adapter_name not in self.adapter_files:
+                continue
+            if adapter_name == "ppi":
+                adapter_rows.extend(self._compute_ppi_sources())
+            else:
+                adapter_rows.append(self._compute_adapter_stats(adapter_name))
+            schema_rows.extend(self._compute_schema_rows(adapter_name))
+
+        # Append global schema summary
+        global_schema = {}
+        for row in schema_rows:
+            key = row["type_name"]
+            entry = global_schema.setdefault(
+                key,
+                {
+                    "adapter": "ALL",
+                    "type_name": key,
+                    "type_kind": row["type_kind"],
+                    "count": 0,
+                    "property_count": row["property_count"],
+                    "size_bytes": 0,
+                },
+            )
+            entry["count"] += row["count"]
+            entry["size_bytes"] += row["size_bytes"]
+            entry["property_count"] = max(entry["property_count"], row["property_count"])
+
+        schema_rows.extend(sorted(global_schema.values(), key=lambda r: r["type_name"]))
+
+        # Append ALL row for adapter stats
+        if adapter_rows:
+            total_nodes = sum(r["nodes_count"] for r in adapter_rows)
+            total_edges = sum(r["edges_count"] for r in adapter_rows)
+            total_nodes_size = sum(r["nodes_size_bytes"] for r in adapter_rows)
+            total_edges_size = sum(r["edges_size_bytes"] for r in adapter_rows)
+            adapter_rows.append(
+                {
+                    "adapter": "ALL",
+                    "nodes_count": total_nodes,
+                    "edges_count": total_edges,
+                    "nodes_size_bytes": total_nodes_size,
+                    "edges_size_bytes": total_edges_size,
+                    "total_size_bytes": total_nodes_size + total_edges_size,
+                }
+            )
+
+        self._write_adapter_stats(adapter_rows)
+        self._write_schema_stats(schema_rows)
+
+        if current_adapter:
+            if current_adapter == "ppi":
+                for row in adapter_rows:
+                    if row["adapter"].startswith("PPI-"):
+                        STATS_LOGGER.info(
+                            f"{row['adapter']} edges={row['edges_count']} "
+                            f"edges_size={row['edges_size_bytes']} total_size={row['total_size_bytes']}"
+                        )
+            else:
+                for row in adapter_rows:
+                    if row["adapter"] == ADAPTER_DISPLAY_NAMES.get(current_adapter, current_adapter):
+                        STATS_LOGGER.info(
+                            f"{row['adapter']} nodes={row['nodes_count']} edges={row['edges_count']} "
+                            f"nodes_size={row['nodes_size_bytes']} edges_size={row['edges_size_bytes']} "
+                            f"total_size={row['total_size_bytes']}"
+                        )
+
+        total_nodes = 0
+        total_edges = 0
+        total_size = 0
+        for row in global_schema.values():
+            if row["type_kind"] == "edge":
+                total_edges += row["count"]
+            else:
+                total_nodes += row["count"]
+            total_size += row["size_bytes"]
+        STATS_LOGGER.info(
+            f"ALL nodes={total_nodes} edges={total_edges} total_size={total_size}"
+        )
+
+
 def run_adapter(adapter_name, adapter_func):
     """Run adapter with checkpoint support."""
     # Check if should run based on checkpoint and CLI args
     if use_checkpoint and not checkpoint.should_run(adapter_name, args.skip_until, only_adapters):
         print(f"⏭️  Skipping {adapter_name} (already completed)")
+        stats_manager.on_adapter_end(adapter_name)
         return True
 
     log_adapter_boundary(adapter_name, "start")
+    stats_manager.on_adapter_start(adapter_name)
     try:
         adapter_func()
         if use_checkpoint:
             checkpoint.mark_completed(adapter_name)
         print(f"✓ {adapter_name} adapter completed successfully")
+        stats_manager.on_adapter_end(adapter_name)
         return True
     except Exception as e:
         print(f"WARNING: {adapter_name} adapter failed: {e}")
@@ -301,13 +750,16 @@ def run_adapter(adapter_name, adapter_func):
             checkpoint.mark_failed(adapter_name, e)
         import traceback
         traceback.print_exc()
+        stats_manager.on_adapter_end(adapter_name)
         return False
     finally:
         log_adapter_boundary(adapter_name, "end")
         aggressive_memory_cleanup(adapter_name)
 
-bc = BioCypher(biocypher_config_path= str(project_root / "config/biocypher_config.yaml"),
-               schema_config_path= str(project_root / "config/schema_config.yaml")
+bc = BioCypher(
+    biocypher_config_path=str(project_root / "config/biocypher_config.yaml"),
+    schema_config_path=str(project_root / "config/schema_config.yaml"),
+    output_directory=output_dir_path,
 )
 
 # Load settings from config and CLI args
@@ -316,7 +768,14 @@ export_as_csv = crossbar_config['settings']['export_csv']
 TEST_MODE = args.test_mode
 UPDATE_SCHEMA_DYNAMICALLY = crossbar_config['settings']['update_schema_dynamically']
 ORGANISM = crossbar_config['settings']['organism']
-USE_EMBEDDINGS = crossbar_config['settings']['use_embeddings']
+USE_EMBEDDINGS = crossbar_config['settings']['use_embeddings'] and not TEST_MODE
+
+stats_manager = StatsManager(output_dir_path, stats_dir, TEST_MODE)
+
+if args.stats_only:
+    stats_manager.write_stats()
+    print(f"Stats written to {stats_dir}")
+    sys.exit(0)
 
 
 def update_schema_with_dynamic_types(schema_path: str, annotation_types: set, feature_types: set):
@@ -531,6 +990,7 @@ def run_drug():
     drug_adapter = Drug(
         drugbank_user=drugbank_user,
         drugbank_passwd=drugbank_passwd,
+        organism=ORGANISM,
         export_csv=export_as_csv,
         output_dir=output_dir_path,
         test_mode=TEST_MODE,
@@ -560,7 +1020,8 @@ def run_orthology():
     orthology_adapter = Orthology(
         export_csv=export_as_csv,
         output_dir=output_dir_path,
-        test_mode=TEST_MODE
+        test_mode=TEST_MODE,
+        organism=ORGANISM,
     )
     orthology_adapter.download_orthology_data(cache=CACHE)
     # Note: Orthology only has edges, no nodes

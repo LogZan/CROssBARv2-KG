@@ -170,6 +170,13 @@ class Compound:
         gc.collect()
         logger.debug("Memory cleanup completed")
 
+    def _get_uniprot_organism(self):
+        if self.test_mode:
+            return 9606
+        if self.stitch_organism in ("*", None, ""):
+            return None
+        return self.stitch_organism
+
     @validate_call
     def download_compound_data(
         self,
@@ -262,9 +269,9 @@ class Compound:
         logger.debug("Started downloading Chembl data (streaming mode)")
 
         # Limit ChemBL pages to avoid OOM in test mode
-        # Test mode: 1 page (~1000 records)
+        # Test mode: 20 pages (~20000 records)
         # Normal mode: No limit (downloads all data)
-        max_pages = 1 if self.test_mode else None
+        max_pages = 20 if self.test_mode else None
         logger.info(f"Using max_pages={max_pages} for ChemBL data ({'test mode' if self.test_mode else 'full download'})")
 
         # Step 1: Load smaller lookup tables first
@@ -483,13 +490,13 @@ class Compound:
             f"Chembl data is processed in {round((t1-t0) / 60, 2)} mins"
         )
 
-        # Clean up raw ChEMBL data in test mode
-        if self.test_mode:
-            for attr in ['chembl_acts', 'document_to_pubmed']:
-                if hasattr(self, attr):
-                    delattr(self, attr)
-            gc.collect()
-            logger.debug("Cleaned up ChEMBL raw data")
+        # # Clean up raw ChEMBL data in test mode
+        # if self.test_mode:
+        #     for attr in ['chembl_acts', 'document_to_pubmed']:
+        #         if hasattr(self, attr):
+        #             delattr(self, attr)
+        #     gc.collect()
+        #     logger.debug("Cleaned up ChEMBL raw data")
 
         return chembl_cti_df
 
@@ -515,12 +522,16 @@ class Compound:
             organism = self.stitch_organism
 
         organism = common.to_list(organism)
+        if self.test_mode:
+            organism = [9606]
 
         logger.debug("Started downloading STITCH data")
         t0 = time()
 
         # map string ids to swissprot ids
-        uniprot_to_string = uniprot.uniprot_data(fields="xref_string", organism=None, reviewed=True)
+        uniprot_to_string = uniprot.uniprot_data(
+            fields="xref_string", organism=self._get_uniprot_organism(), reviewed=True
+        )
         self.string_to_uniprot = collections.defaultdict(list)
         
         # Handle case where uniprot_to_string is a list instead of dict

@@ -26,3 +26,5 @@ data/malacards
 *nohup*
 logs/
 goa_uniprot_gcrp.gaf.gz
+goa_uniprot_gcrp.gaf.gz.aria2
+biocypher-out-test/*

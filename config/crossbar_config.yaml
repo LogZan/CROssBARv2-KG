@@ -2,13 +2,13 @@
 
 # General settings
 settings:
-  test_mode: false                     # Limit data for testing (100 entries)
+  test_mode: true                     # Limit data for testing (100 entries)
   cache: true                          # Cache data by pypath for future usage
   export_csv: true                     # Export node and edge files as CSV
   update_schema_dynamically: false      # Auto-update schema with new annotation/feature types
   organism: "*"                       # NCBI taxonomy ID (9606=human, "*"=all)
-  use_embeddings: true                 # Load and use embeddings (set false to skip for faster processing)
-  output_dir: "biocypher-out/20260121130930"  # Output directory (use specific dir to resume, or "biocypher-out" for new timestamped dir)
+  use_embeddings: false                 # Load and use embeddings (set false to skip for faster processing)
+  output_dir: "biocypher-out/v1.0"  # Output directory (use specific dir to resume, or "biocypher-out" for new timestamped dir)
 
 # Checkpoint settings for resumable execution
 checkpoint:
@@ -18,7 +18,7 @@ checkpoint:
 # Data paths
 data_paths:
   uniprot_json: '/GenSIvePFS/users/data/UniProt/UniProtKB_SwissProt/uniprotkb_reviewed_true_2025_11_04.json'
-  uniprot_keywords_json: '/GenSIvePFS/users/data/UniProt/keywords_all_2025_12_25.json'
+  uniprot_keywords_json: '/GenSIvePFS/users/data/UniProt/Keywords/keywords_all_2025_12_25.json'
   embeddings_dir: '/GenSIvePFS/users/data/embeddings'
   malacards_dir: '/GenSIvePFS/users/data/malacards'
   interpro_dir: '/GenSIvePFS/users/data/InterPro/107.0'

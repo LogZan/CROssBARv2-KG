@@ -19,6 +19,7 @@ from . import kegg_local
 # Use memory-efficient streaming parser for DrugBank
 from .drugbank_streaming import DrugbankStreaming
 from contextlib import ExitStack
+from itertools import islice
 from typing import Literal, Union, Optional
 from bioregistry import normalize_curie
 from tqdm import tqdm
@@ -179,6 +180,7 @@ class DrugEdgeType(Enum, metaclass=DrugEnumMeta):
 class DrugModel(BaseModel):
     drugbank_user: EmailStr
     drugbank_passwd: str
+    organism: Optional[int | str | Literal["*"]] = None
     node_fields: Union[list[DrugNodeField], None] = None
     dti_edge_fields: Union[list[DrugDTIEdgeField], None] = None
     ddi_edge_fields: Union[list[DrugDDIEdgeField], None] = None
@@ -205,6 +207,7 @@ class Drug:
         self,
         drugbank_user: EmailStr,
         drugbank_passwd: str,
+        organism: Optional[int | str | Literal["*"]] = None,
         node_fields: Optional[Union[list[DrugNodeField], None]] = None,
         dti_edge_fields: Optional[Union[list[DrugDTIEdgeField], None]] = None,
         ddi_edge_fields: Optional[Union[list[DrugDDIEdgeField], None]] = None,
@@ -233,6 +236,7 @@ class Drug:
         model = DrugModel(
             drugbank_user=drugbank_user,
             drugbank_passwd=drugbank_passwd,
+            organism=organism,
             node_fields=node_fields,
             dti_edge_fields=dti_edge_fields,
             ddi_edge_fields=ddi_edge_fields,
@@ -246,6 +250,7 @@ class Drug:
 
         self.user = model["drugbank_user"]
         self.passwd = model["drugbank_passwd"]
+        self.organism = model["organism"]
         self.add_prefix = model["add_prefix"]
         self.export_csv = model["export_csv"]
         self.output_dir = model["output_dir"]
@@ -287,6 +292,13 @@ class Drug:
                 self._swissprots = swissprots_full
             logger.debug(f"Loaded {len(self._swissprots)} SwissProt IDs")
         return self._swissprots
+
+    def _get_uniprot_organism(self):
+        if self.test_mode:
+            return 9606
+        if self.organism in ("*", None, ""):
+            return None
+        return self.organism
 
     @swissprots.setter
     def swissprots(self, value):
@@ -895,7 +907,9 @@ class Drug:
             self.dgidb_dti = []
 
         # map entrez gene ids to swissprot ids
-        uniprot_to_entrez = uniprot.uniprot_data(fields="xref_geneid", organism=None, reviewed=True)
+        uniprot_to_entrez = uniprot.uniprot_data(
+            fields="xref_geneid", organism=self._get_uniprot_organism(), reviewed=True
+        )
         self.entrez_to_uniprot = collections.defaultdict(list)
         if isinstance(uniprot_to_entrez, list):
             if not uniprot_to_entrez:
@@ -1857,12 +1871,16 @@ class Drug:
             organism = string.string_species()
 
         organism = common.to_list(organism)
+        if self.test_mode:
+            organism = [9606]
 
         logger.debug("Started downloading STITCH data")
         t0 = time()
 
         # map string ids to swissprot ids
-        uniprot_to_string = uniprot.uniprot_data(fields="xref_string", organism=None, reviewed=True)
+        uniprot_to_string = uniprot.uniprot_data(
+            fields="xref_string", organism=self._get_uniprot_organism(), reviewed=True
+        )
         self.string_to_uniprot = collections.defaultdict(list)
         if isinstance(uniprot_to_string, dict):
             for k, v in uniprot_to_string.items():

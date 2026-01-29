@@ -4,11 +4,12 @@ from pypath.share import curl, settings
 from pypath.inputs import oma, uniprot, pharos
 from pypath.utils import taxonomy
 
-from typing import Union
+from typing import Union, Optional, Literal
 from contextlib import ExitStack
 from bioregistry import normalize_curie
 from time import time
 import os
+import json
 
 import pandas as pd
 import numpy as np
@@ -110,6 +111,7 @@ class OrthologyModel(BaseModel):
     test_mode: bool = False
     export_csv: bool = False
     output_dir: DirectoryPath | None = None
+    organism: Optional[int | str | Literal["*"]] = None
 
 
 class Orthology:
@@ -128,6 +130,7 @@ class Orthology:
         test_mode: bool = False,
         export_csv: bool = False,
         output_dir: DirectoryPath | None = None,
+        organism: Optional[int | str | Literal["*"]] = None,
     ):
         """
         Args:
@@ -150,11 +153,13 @@ class Orthology:
             test_mode=test_mode,
             export_csv=export_csv,
             output_dir=output_dir,
+            organism=organism,
         ).model_dump()
 
         self.add_prefix = model["add_prefix"]
         self.export_csv = model["export_csv"]
         self.output_dir = model["output_dir"]
+        self.organism = model["organism"]
 
         # set edge fields
         self.set_edge_fields(edge_fields=model["edge_fields"])
@@ -170,6 +175,13 @@ class Orthology:
         self.early_stopping = None
         if model["test_mode"]:
             self.early_stopping = 100
+
+    def _get_uniprot_organism(self):
+        if self.early_stopping:
+            return 9606
+        if self.organism in ("*", None, ""):
+            return None
+        return self.organism
 
     @validate_call
     def download_orthology_data(
@@ -209,7 +221,7 @@ class Orthology:
         """
 
         self.entry_name_to_uniprot = uniprot.uniprot_data(
-            field="id", reviewed=True, organism=None
+            field="id", reviewed=True, organism=self._get_uniprot_organism()
         )
         if isinstance(self.entry_name_to_uniprot, list):
             if not self.entry_name_to_uniprot:
@@ -226,7 +238,7 @@ class Orthology:
             self.entry_name_to_uniprot = {}
 
         uniprot_to_entrez = uniprot.uniprot_data(
-            field="xref_geneid", reviewed=True, organism=None
+            field="xref_geneid", reviewed=True, organism=self._get_uniprot_organism()
         )
         if isinstance(uniprot_to_entrez, list):
             if not uniprot_to_entrez:
@@ -246,7 +258,13 @@ class Orthology:
         self.oma_orthology = []
 
         for t in tqdm(self.oma_organisms):
-            tax_orthology = oma.oma_orthologs(organism_a=9606, organism_b=t)
+            try:
+                tax_orthology = oma.oma_orthologs(organism_a=9606, organism_b=t)
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(
+                    f"OMA orthology download failed for tax id {t}: {e}"
+                )
+                continue
             tax_orthology = [
                 i
                 for i in tax_orthology
@@ -333,7 +351,7 @@ class Orthology:
         t0 = time()
 
         uniprot_to_entrez = uniprot.uniprot_data(
-            field="xref_geneid", reviewed=True, organism=None
+            field="xref_geneid", reviewed=True, organism=self._get_uniprot_organism()
         )
         if isinstance(uniprot_to_entrez, list):
             if not uniprot_to_entrez:
