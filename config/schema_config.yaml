@@ -1,4 +1,4 @@
-Title: BioCypher graph schema configuration file for CROssBAR v2
+Title: BioCypher graph schema configuration file for UniProt Keywords
 gene:
   represented_as: node
   preferred_id: ncbigene
@@ -9,6 +9,12 @@ gene:
     ensembl_transcript_ids: str[]
     ensembl_gene_ids: str[]
     gene_symbol: str
+    orfNames: str
+    geneName: str
+    synonyms: str
+    orderedLocusNames: str
+    geneLocations: str
+    geneEncodingType: str
 protein:
   represented_as: node
   preferred_id: uniprot
@@ -23,24 +29,35 @@ protein:
     organism_id: int
     sequence: str
     prott5_embedding: float[]
-    uniprot_kb_id: str
-    secondary_accessions: str[]
-    protein_existence: str
-    annotation_score: float
-    first_public_date: str
-    last_annotation_update_date: str
-    entry_version: int
-    sequence_version: int
-    recommended_short_names: str[]
-    ec_numbers: str[]
-    alternative_names_json: str
-    protein_flag: str
+    entryType: str
+    primaryAccession: str
+    secondaryAccessions: str
+    uniProtkbId: str
+    firstPublicDate: str
+    lastAnnotationUpdateDate: str
+    lastSequenceUpdateDate: str
+    entryVersion: int
+    sequenceVersion: int
+    annotationScore: float
+    proteinExistence: str
+    molWeight: str
+    crc64: str
+    md5: str
 organism taxon:
   represented_as: node
   preferred_id: ncbitaxon
   label_in_input: organism
   properties:
     organism_name: str
+    scientificName: str
+    taxonId: int
+    lineage: str
+    commonName: str
+    synonyms: str
+    organismHosts_scientificName: str
+    organismHosts_commonName: str
+    organismHosts_synonyms: str
+    organismHosts_taxonId: str
 protein domain:
   represented_as: node
   preferred_id: interpro
@@ -169,123 +186,6 @@ ec number:
   properties:
     name: str
     rxnfp_embedding: float[]
-uniprot keyword:
-  is_a: NamedThing
-  represented_as: node
-  preferred_id: uniprot_keyword
-  label_in_input: uniprot_keyword
-  properties:
-    name: str
-    definition: str
-    category: str
-    synonyms: str[]
-    reviewed_protein_count: int
-functional annotation:
-  is_a: NamedThing
-  represented_as: node
-  preferred_id: internal
-  label_in_input: functional_annotation
-function annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: function_annotation
-subunit annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: subunit_annotation
-subcellular location annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: subcellular_location_annotation
-tissue specificity annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: tissue_specificity_annotation
-similarity annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: similarity_annotation
-ptm annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: ptm_annotation
-catalytic activity annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: catalytic_activity_annotation
-pathway annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: pathway_annotation
-cofactor annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: cofactor_annotation
-domain annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: domain_annotation
-activity regulation annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: activity_regulation_annotation
-sequence feature:
-  is_a: NamedThing
-  represented_as: node
-  preferred_id: internal
-  label_in_input: sequence_feature
-domain feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: domain_feature
-binding site feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: binding_site_feature
-active site feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: active_site_feature
-modified residue feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: modified_residue_feature
-glycosylation feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: glycosylation_feature
-disulfide bond feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: disulfide_bond_feature
-transmembrane feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: transmembrane_feature
-natural variant feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: natural_variant_feature
-mutagenesis feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: mutagenesis_feature
-chain feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: chain_feature
-region feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: region_feature
-uniprot disease:
-  is_a: disease
-  represented_as: node
-  preferred_id: uniprot_disease
-  label_in_input: uniprot_disease
-  properties:
-    disease_accession: str
-    acronym: str
 gene to protein relationship:
   is_a: gene to gene product relationship
   represented_as: edge
@@ -298,7 +198,7 @@ protein to organism taxon association:
   represented_as: edge
   label_as_edge: Protein_belongs_to_organism
   source: protein
-  target: organismTaxon
+  target: organism taxon
   label_in_input: Protein_belongs_to_organism
 post translational interaction:
   is_a: pairwise molecular interaction
@@ -688,162 +588,280 @@ gene to gene regulatory association:
     dorothea_confidence_level: str
     pubmed_id: str[]
     tf_effect: str
-protein to keyword association:
-  is_a: association
-  represented_as: edge
-  label_as_edge: protein_has_keyword
-  source: protein
-  target: uniprot keyword
-  label_in_input: protein_has_keyword
-keyword hierarchical association:
-  is_a: association
-  represented_as: edge
-  label_as_edge: keyword_child_of_keyword
-  source: uniprot keyword
-  target: uniprot keyword
-  label_in_input: keyword_is_a_keyword
-keyword to biological process association:
-  is_a: association
-  represented_as: edge
-  label_as_edge: keyword_maps_to_biological_process
-  source: uniprot keyword
-  target: biological process
-  label_in_input: keyword_maps_to_biological_process
-keyword to molecular function association:
-  is_a: association
-  represented_as: edge
-  label_as_edge: keyword_maps_to_molecular_function
-  source: uniprot keyword
-  target: molecular function
-  label_in_input: keyword_maps_to_molecular_function
-keyword to cellular component association:
-  is_a: association
-  represented_as: edge
-  label_as_edge: keyword_maps_to_cellular_component
-  source: uniprot keyword
-  target: cellular component
-  label_in_input: keyword_maps_to_cellular_component
-protein to functional annotation association:
-  is_a: association
-  represented_as: edge
-  label_as_edge: protein_has_annotation
-  source: protein
-  target: functional annotation
-  label_in_input: protein_has_annotation
+uniprot keyword:
+  represented_as: node
+  preferred_id: uniprot.keyword
+  label_in_input: uniprot_keyword
   properties:
-    text: str
-    evidence_code: str
-    molecule: str
-    reaction_name: str
-    rhea_id: str
-    chebi_ids: str[]
-    cofactor_name: str
-    location_id: str
-protein to sequence feature association:
-  is_a: association
-  represented_as: edge
-  label_as_edge: protein_has_feature
-  source: protein
-  target: sequence feature
-  label_in_input: protein_has_feature
+    name: str
+    category: str
+    definition: str
+    synonyms: str[]
+    reviewedProteinCount: int
+    unreviewedProteinCount: int
+uniprot disease:
+  represented_as: node
+  preferred_id: uniprot_disease
+  label_in_input: uniprot_disease
   properties:
-    start_position: int
-    end_position: int
-    start_modifier: str
-    end_modifier: str
+    diseaseAccession: str
+    diseaseId: str
+    acronym: str
     description: str
-    original_sequence: str
-    alternative_sequence: str
-    ligand_name: str
-    ligand_id: str
-    feature_id: str
-    evidence_codes: str[]
-    pubmed_ids: str[]
-    pdb_ids: str[]
-    prosite_ids: str[]
-    chebi_ids: str[]
-protein to uniprot disease association:
-  is_a: association
-  represented_as: edge
-  label_as_edge: protein_associated_with_uniprot_disease
-  source: protein
-  target: uniprot disease
-  label_in_input: protein_associated_with_uniprot_disease
-  properties:
-    note: str
-uniprot protein interaction:
-  is_a: pairwise molecular interaction
-  represented_as: edge
-  label_as_edge: uniprot_protein_interacts_with_protein
-  source: protein
-  target: protein
-  label_in_input: uniprot_protein_interacts_with_protein
-  properties:
-    number_of_experiments: int
-    organism_differ: bool
-    intact_id_source: str
-    intact_id_target: str
-mass spectrometry annotation:
+    diseaseCrossReferenceId: str
+protein description:
+  represented_as: node
+  preferred_id: internal
+  label_in_input: protein_description
+recommended name:
+  represented_as: node
+  preferred_id: internal
+  label_in_input: recommended_name
+alternative name:
+  represented_as: node
+  preferred_id: internal
+  label_in_input: alternative_name
+extra attributes:
+  represented_as: node
+  preferred_id: internal
+  label_in_input: extra_attributes
+functional annotation:
+  represented_as: node
+  preferred_id: internal
+  label_in_input: functional_annotation
+sequence feature:
+  represented_as: node
+  preferred_id: internal
+  label_in_input: sequence_feature
+function annotation:
   is_a: functional annotation
   represented_as: node
-  label_in_input: mass_spectrometry_annotation
-biotechnology annotation:
+  label_in_input: function_annotation
+catalytic_activity annotation:
   is_a: functional annotation
   represented_as: node
-  label_in_input: biotechnology_annotation
-caution annotation:
+  label_in_input: catalytic_activity_annotation
+subunit annotation:
   is_a: functional annotation
   represented_as: node
-  label_in_input: caution_annotation
-developmental stage annotation:
+  label_in_input: subunit_annotation
+domain annotation:
   is_a: functional annotation
   represented_as: node
-  label_in_input: developmental_stage_annotation
-sequence caution annotation:
+  label_in_input: domain_annotation
+activity_regulation annotation:
   is_a: functional annotation
   represented_as: node
-  label_in_input: sequence_caution_annotation
-disruption phenotype annotation:
+  label_in_input: activity_regulation_annotation
+biophysicochemical_properties annotation:
   is_a: functional annotation
   represented_as: node
-  label_in_input: disruption_phenotype_annotation
-web resource annotation:
+  label_in_input: biophysicochemical_properties_annotation
+subcellular_location annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: subcellular_location_annotation
+similarity annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: similarity_annotation
+alternative_products annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: alternative_products_annotation
+ptm annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: ptm_annotation
+web_resource annotation:
   is_a: functional annotation
   represented_as: node
   label_in_input: web_resource_annotation
-induction annotation:
+mass_spectrometry annotation:
   is_a: functional annotation
   represented_as: node
-  label_in_input: induction_annotation
+  label_in_input: mass_spectrometry_annotation
+tissue_specificity annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: tissue_specificity_annotation
+disruption_phenotype annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: disruption_phenotype_annotation
 miscellaneous annotation:
   is_a: functional annotation
   represented_as: node
   label_in_input: miscellaneous_annotation
-alternative products annotation:
+cofactor annotation:
   is_a: functional annotation
   represented_as: node
-  label_in_input: alternative_products_annotation
-biophysicochemical properties annotation:
+  label_in_input: cofactor_annotation
+pathway annotation:
   is_a: functional annotation
   represented_as: node
-  label_in_input: biophysicochemical_properties_annotation
+  label_in_input: pathway_annotation
+developmental_stage annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: developmental_stage_annotation
+induction annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: induction_annotation
+sequence_caution annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: sequence_caution_annotation
+biotechnology annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: biotechnology_annotation
+interaction annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: interaction_annotation
 polymorphism annotation:
   is_a: functional annotation
   represented_as: node
   label_in_input: polymorphism_annotation
-propeptide feature:
+caution annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: caution_annotation
+disease annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: disease_annotation
+allergen annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: allergen_annotation
+toxic_dose annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: toxic_dose_annotation
+rna_editing annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: rna_editing_annotation
+pharmaceutical annotation:
+  is_a: functional annotation
+  represented_as: node
+  label_in_input: pharmaceutical_annotation
+chain feature:
   is_a: sequence feature
   represented_as: node
-  label_in_input: propeptide_feature
+  label_in_input: chain_feature
+domain feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: domain_feature
+coiled_coil feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: coiled_coil_feature
+active_site feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: active_site_feature
+binding_site feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: binding_site_feature
+site feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: site_feature
+mutagenesis feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: mutagenesis_feature
+beta_strand feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: beta_strand_feature
+helix feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: helix_feature
 turn feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: turn_feature
-transit peptide feature:
+signal feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: signal_feature
+region feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: region_feature
+glycosylation feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: glycosylation_feature
+propeptide feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: propeptide_feature
+peptide feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: peptide_feature
+topological_domain feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: topological_domain_feature
+transmembrane feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: transmembrane_feature
+intramembrane feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: intramembrane_feature
+motif feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: motif_feature
+modified_residue feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: modified_residue_feature
+disulfide_bond feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: disulfide_bond_feature
+cross_link feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: cross_link_feature
+compositional_bias feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: compositional_bias_feature
+sequence_conflict feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: sequence_conflict_feature
+alternative_sequence feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: alternative_sequence_feature
+repeat feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: repeat_feature
+transit_peptide feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: transit_peptide_feature
-zinc finger feature:
+non_terminal_residue feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: non_terminal_residue_feature
+zinc_finger feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: zinc_finger_feature
@@ -851,103 +869,822 @@ lipidation feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: lipidation_feature
-motif feature:
+natural_variant feature:
   is_a: sequence feature
   represented_as: node
-  label_in_input: motif_feature
-site feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: site_feature
-topological domain feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: topological_domain_feature
-non terminal residue feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: non_terminal_residue_feature
-signal feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: signal_feature
-alternative sequence feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: alternative_sequence_feature
-cross link feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: cross_link_feature
-beta strand feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: beta_strand_feature
-compositional bias feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: compositional_bias_feature
-peptide feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: peptide_feature
-sequence conflict feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: sequence_conflict_feature
-coiled coil feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: coiled_coil_feature
-intramembrane feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: intramembrane_feature
-dna binding feature:
+  label_in_input: natural_variant_feature
+dna_binding feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: dna_binding_feature
-repeat feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: repeat_feature
-helix feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: helix_feature
-allergen annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: allergen_annotation
-toxic dose annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: toxic_dose_annotation
-pharmaceutical annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: pharmaceutical_annotation
-disease annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: disease_annotation
-rna editing annotation:
-  is_a: functional annotation
-  represented_as: node
-  label_in_input: rna_editing_annotation
-non standard residue feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: non_standard_residue_feature
-sequence uncertainty feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: sequence_uncertainty_feature
-non adjacent residues feature:
-  is_a: sequence feature
-  represented_as: node
-  label_in_input: non_adjacent_residues_feature
-initiator methionine feature:
+initiator_methionine feature:
   is_a: sequence feature
   represented_as: node
   label_in_input: initiator_methionine_feature
+non_standard_residue feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: non_standard_residue_feature
+sequence_uncertainty feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: sequence_uncertainty_feature
+non_adjacent_residues feature:
+  is_a: sequence feature
+  represented_as: node
+  label_in_input: non_adjacent_residues_feature
+protein to keyword association:
+  is_a: association
+  represented_as: edge
+  label_as_edge: protein_has_keyword
+  source: protein
+  target: uniprot keyword
+  label_in_input: protein_has_keyword
+protein to disease association:
+  is_a: association
+  represented_as: edge
+  label_as_edge: protein_has_disease
+  source: protein
+  target: uniprot disease
+  label_in_input: protein_has_disease
+protein interacts protein:
+  is_a: pairwise molecular interaction
+  represented_as: edge
+  label_as_edge: Protein_interacts_with_protein
+  source: protein
+  target: protein
+  label_in_input: Protein_interacts_with_protein
+  properties:
+    numberOfExperiments: int
+    organismDiffer: bool
+    interactantOne_intActId: str
+    interactantTwo_intActId: str
+protein has extra attributes:
+  is_a: association
+  represented_as: edge
+  label_as_edge: protein_has_extra_attributes
+  source: protein
+  target: extra attributes
+  label_in_input: protein_has_extra_attributes
+  properties:
+    FUNCTION: str
+    CATALYTIC ACTIVITY: str
+    SUBUNIT: str
+    DOMAIN: str
+    ACTIVITY REGULATION: str
+    BIOPHYSICOCHEMICAL PROPERTIES: str
+    SUBCELLULAR LOCATION: str
+    SIMILARITY: str
+    ALTERNATIVE PRODUCTS: str
+    PTM: str
+    WEB RESOURCE: str
+    MASS SPECTROMETRY: str
+    TISSUE SPECIFICITY: str
+    DISRUPTION PHENOTYPE: str
+    MISCELLANEOUS: str
+    COFACTOR: str
+    PATHWAY: str
+    DEVELOPMENTAL STAGE: str
+    INDUCTION: str
+    SEQUENCE CAUTION: str
+    BIOTECHNOLOGY: str
+    INTERACTION: str
+    POLYMORPHISM: str
+    CAUTION: str
+    DISEASE: str
+    ALLERGEN: str
+    TOXIC DOSE: str
+    RNA EDITING: str
+    PHARMACEUTICAL: str
+    Chain: str
+    Domain: str
+    Coiled coil: str
+    Active site: str
+    Binding site: str
+    Site: str
+    Mutagenesis: str
+    Beta strand: str
+    Helix: str
+    Turn: str
+    Signal: str
+    Region: str
+    Glycosylation: str
+    Propeptide: str
+    Peptide: str
+    Topological domain: str
+    Transmembrane: str
+    Intramembrane: str
+    Motif: str
+    Modified residue: str
+    Disulfide bond: str
+    Cross-link: str
+    Compositional bias: str
+    Sequence conflict: str
+    Alternative sequence: str
+    Repeat: str
+    Transit peptide: str
+    Non-terminal residue: str
+    Zinc finger: str
+    Lipidation: str
+    Natural variant: str
+    DNA binding: str
+    Initiator methionine: str
+    Non-standard residue: str
+    Sequence uncertainty: str
+    Non-adjacent residues: str
+    uniParcId: str
+protein has protein description:
+  is_a: association
+  represented_as: edge
+  label_as_edge: protein_has_protein_description
+  source: protein
+  target: protein description
+  label_in_input: protein_has_protein_description
+  properties:
+    flag: str
+    fullName: str
+    alternativeNames_fullName: str
+    shortNames: str
+    ecNumbers: str
+    alternativeNames_shortNames: str
+    alternativeNames_ecNumbers: str
+    allergenName: str
+    cdAntigenNames: str
+    recommendedName_fullName: str
+    recommendedName_shortNames: str
+    recommendedName_ecNumbers: str
+    includes_alternativeNames_fullName: str
+    includes_alternativeNames_ecNumbers: str
+    includes_alternativeNames_shortNames: str
+    proteinDescription_allergenName: str
+    innNames: str
+protein description has recommended name:
+  is_a: association
+  represented_as: edge
+  label_as_edge: protein_description_has_recommended_name
+  source: protein description
+  target: recommended name
+  label_in_input: protein_description_has_recommended_name
+  properties:
+    fullName: str
+    shortNames: str
+    ecNumbers: str
+protein description has alternative name:
+  is_a: association
+  represented_as: edge
+  label_as_edge: protein_description_has_alternative_name
+  source: protein description
+  target: alternative name
+  label_in_input: protein_description_has_alternative_name
+  properties:
+    fullName: str
+    ecNumbers: str
+    shortNames: str
+protein has comment:
+  is_a: association
+  represented_as: edge
+  label_as_edge: protein_has_comment
+  source: protein
+  target: functional annotation
+  label_in_input: protein_has_comment
+  properties: &id001
+    max: str
+    approximate: str
+    value: str
+    name: str
+    database: str
+    id: str
+    commentType: str
+    diseaseId: str
+    diseaseAccession: str
+    acronym: str
+    description: str
+    diseaseCrossReference_database: str
+    diseaseCrossReference_id: str
+    events: str
+    ftp: str
+    uniProtKBAccession: str
+    intActId: str
+    interactantTwo_uniProtKBAccession: str
+    geneName: str
+    interactantTwo_intActId: str
+    numberOfExperiments: str
+    organismDiffer: str
+    chainId: str
+    interactantOne_chainId: str
+    isoformIds: str
+    isoformSequenceStatus: str
+    sequenceIds: str
+    synonyms: str
+    velocity: str
+    unit: str
+    enzyme: str
+    constant: str
+    michaelisConstants_unit: str
+    substrate: str
+    texts: str
+    locationType: str
+    method: str
+    molWeight: str
+    molWeightError: str
+    molecule: str
+    note_texts: str
+    note: str
+    phDependence_texts: str
+    directionType: str
+    reactionCrossReference_database: str
+    reactionCrossReference_id: str
+    position: str
+    reaction_name: str
+    reactionCrossReferences_database: str
+    reactionCrossReferences_id: str
+    ecNumber: str
+    redoxPotential_texts: str
+    resourceName: str
+    resourceUrl: str
+    sequence: str
+    sequenceCautionType: str
+    location: str
+    location_id: str
+    topology: str
+    topology_id: str
+    orientation: str
+    orientation_id: str
+    temperatureDependence_texts: str
+    comments_texts: str
+protein has feature:
+  is_a: association
+  represented_as: edge
+  label_as_edge: protein_has_feature
+  source: protein
+  target: sequence feature
+  label_in_input: protein_has_feature
+  properties: &id002
+    originalSequence: str
+    alternativeSequences: str
+    description: str
+    database: str
+    id: str
+    featureId: str
+    name: str
+    ligand_id: str
+    label: str
+    note: str
+    ligandPart_name: str
+    ligandPart_id: str
+    ligandPart_note: str
+    value: str
+    modifier: str
+    end: str
+    end_modifier: str
+    sequence: str
+protein has function comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_function
+  source: protein
+  target: function annotation
+  label_in_input: protein_has_function
+  properties: *id001
+protein has catalytic_activity comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_catalytic_activity
+  source: protein
+  target: catalytic_activity annotation
+  label_in_input: protein_has_catalytic_activity
+  properties: *id001
+protein has subunit comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_subunit
+  source: protein
+  target: subunit annotation
+  label_in_input: protein_has_subunit
+  properties: *id001
+protein has domain comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_domain
+  source: protein
+  target: domain annotation
+  label_in_input: protein_has_domain
+  properties: *id001
+protein has activity_regulation comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_activity_regulation
+  source: protein
+  target: activity_regulation annotation
+  label_in_input: protein_has_activity_regulation
+  properties: *id001
+protein has biophysicochemical_properties comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_biophysicochemical_properties
+  source: protein
+  target: biophysicochemical_properties annotation
+  label_in_input: protein_has_biophysicochemical_properties
+  properties: *id001
+protein has subcellular_location comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_subcellular_location
+  source: protein
+  target: subcellular_location annotation
+  label_in_input: protein_has_subcellular_location
+  properties: *id001
+protein has similarity comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_similarity
+  source: protein
+  target: similarity annotation
+  label_in_input: protein_has_similarity
+  properties: *id001
+protein has alternative_products comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_alternative_products
+  source: protein
+  target: alternative_products annotation
+  label_in_input: protein_has_alternative_products
+  properties: *id001
+protein has ptm comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_ptm
+  source: protein
+  target: ptm annotation
+  label_in_input: protein_has_ptm
+  properties: *id001
+protein has web_resource comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_web_resource
+  source: protein
+  target: web_resource annotation
+  label_in_input: protein_has_web_resource
+  properties: *id001
+protein has mass_spectrometry comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_mass_spectrometry
+  source: protein
+  target: mass_spectrometry annotation
+  label_in_input: protein_has_mass_spectrometry
+  properties: *id001
+protein has tissue_specificity comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_tissue_specificity
+  source: protein
+  target: tissue_specificity annotation
+  label_in_input: protein_has_tissue_specificity
+  properties: *id001
+protein has disruption_phenotype comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_disruption_phenotype
+  source: protein
+  target: disruption_phenotype annotation
+  label_in_input: protein_has_disruption_phenotype
+  properties: *id001
+protein has miscellaneous comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_miscellaneous
+  source: protein
+  target: miscellaneous annotation
+  label_in_input: protein_has_miscellaneous
+  properties: *id001
+protein has cofactor comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_cofactor
+  source: protein
+  target: cofactor annotation
+  label_in_input: protein_has_cofactor
+  properties: *id001
+protein has pathway comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_pathway
+  source: protein
+  target: pathway annotation
+  label_in_input: protein_has_pathway
+  properties: *id001
+protein has developmental_stage comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_developmental_stage
+  source: protein
+  target: developmental_stage annotation
+  label_in_input: protein_has_developmental_stage
+  properties: *id001
+protein has induction comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_induction
+  source: protein
+  target: induction annotation
+  label_in_input: protein_has_induction
+  properties: *id001
+protein has sequence_caution comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_sequence_caution
+  source: protein
+  target: sequence_caution annotation
+  label_in_input: protein_has_sequence_caution
+  properties: *id001
+protein has biotechnology comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_biotechnology
+  source: protein
+  target: biotechnology annotation
+  label_in_input: protein_has_biotechnology
+  properties: *id001
+protein has interaction comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_interaction
+  source: protein
+  target: interaction annotation
+  label_in_input: protein_has_interaction
+  properties: *id001
+protein has polymorphism comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_polymorphism
+  source: protein
+  target: polymorphism annotation
+  label_in_input: protein_has_polymorphism
+  properties: *id001
+protein has caution comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_caution
+  source: protein
+  target: caution annotation
+  label_in_input: protein_has_caution
+  properties: *id001
+protein has disease comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_disease
+  source: protein
+  target: disease annotation
+  label_in_input: protein_has_disease
+  properties: *id001
+protein has allergen comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_allergen
+  source: protein
+  target: allergen annotation
+  label_in_input: protein_has_allergen
+  properties: *id001
+protein has toxic_dose comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_toxic_dose
+  source: protein
+  target: toxic_dose annotation
+  label_in_input: protein_has_toxic_dose
+  properties: *id001
+protein has rna_editing comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_rna_editing
+  source: protein
+  target: rna_editing annotation
+  label_in_input: protein_has_rna_editing
+  properties: *id001
+protein has pharmaceutical comment:
+  is_a: protein has comment
+  represented_as: edge
+  label_as_edge: protein_has_pharmaceutical
+  source: protein
+  target: pharmaceutical annotation
+  label_in_input: protein_has_pharmaceutical
+  properties: *id001
+protein has chain feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_chain_feature
+  source: protein
+  target: chain feature
+  label_in_input: protein_has_chain_feature
+  properties: *id002
+protein has domain feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_domain_feature
+  source: protein
+  target: domain feature
+  label_in_input: protein_has_domain_feature
+  properties: *id002
+protein has coiled_coil feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_coiled_coil_feature
+  source: protein
+  target: coiled_coil feature
+  label_in_input: protein_has_coiled_coil_feature
+  properties: *id002
+protein has active_site feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_active_site_feature
+  source: protein
+  target: active_site feature
+  label_in_input: protein_has_active_site_feature
+  properties: *id002
+protein has binding_site feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_binding_site_feature
+  source: protein
+  target: binding_site feature
+  label_in_input: protein_has_binding_site_feature
+  properties: *id002
+protein has site feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_site_feature
+  source: protein
+  target: site feature
+  label_in_input: protein_has_site_feature
+  properties: *id002
+protein has mutagenesis feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_mutagenesis_feature
+  source: protein
+  target: mutagenesis feature
+  label_in_input: protein_has_mutagenesis_feature
+  properties: *id002
+protein has beta_strand feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_beta_strand_feature
+  source: protein
+  target: beta_strand feature
+  label_in_input: protein_has_beta_strand_feature
+  properties: *id002
+protein has helix feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_helix_feature
+  source: protein
+  target: helix feature
+  label_in_input: protein_has_helix_feature
+  properties: *id002
+protein has turn feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_turn_feature
+  source: protein
+  target: turn feature
+  label_in_input: protein_has_turn_feature
+  properties: *id002
+protein has signal feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_signal_feature
+  source: protein
+  target: signal feature
+  label_in_input: protein_has_signal_feature
+  properties: *id002
+protein has region feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_region_feature
+  source: protein
+  target: region feature
+  label_in_input: protein_has_region_feature
+  properties: *id002
+protein has glycosylation feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_glycosylation_feature
+  source: protein
+  target: glycosylation feature
+  label_in_input: protein_has_glycosylation_feature
+  properties: *id002
+protein has propeptide feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_propeptide_feature
+  source: protein
+  target: propeptide feature
+  label_in_input: protein_has_propeptide_feature
+  properties: *id002
+protein has peptide feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_peptide_feature
+  source: protein
+  target: peptide feature
+  label_in_input: protein_has_peptide_feature
+  properties: *id002
+protein has topological_domain feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_topological_domain_feature
+  source: protein
+  target: topological_domain feature
+  label_in_input: protein_has_topological_domain_feature
+  properties: *id002
+protein has transmembrane feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_transmembrane_feature
+  source: protein
+  target: transmembrane feature
+  label_in_input: protein_has_transmembrane_feature
+  properties: *id002
+protein has intramembrane feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_intramembrane_feature
+  source: protein
+  target: intramembrane feature
+  label_in_input: protein_has_intramembrane_feature
+  properties: *id002
+protein has motif feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_motif_feature
+  source: protein
+  target: motif feature
+  label_in_input: protein_has_motif_feature
+  properties: *id002
+protein has modified_residue feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_modified_residue_feature
+  source: protein
+  target: modified_residue feature
+  label_in_input: protein_has_modified_residue_feature
+  properties: *id002
+protein has disulfide_bond feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_disulfide_bond_feature
+  source: protein
+  target: disulfide_bond feature
+  label_in_input: protein_has_disulfide_bond_feature
+  properties: *id002
+protein has cross_link feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_cross_link_feature
+  source: protein
+  target: cross_link feature
+  label_in_input: protein_has_cross_link_feature
+  properties: *id002
+protein has compositional_bias feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_compositional_bias_feature
+  source: protein
+  target: compositional_bias feature
+  label_in_input: protein_has_compositional_bias_feature
+  properties: *id002
+protein has sequence_conflict feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_sequence_conflict_feature
+  source: protein
+  target: sequence_conflict feature
+  label_in_input: protein_has_sequence_conflict_feature
+  properties: *id002
+protein has alternative_sequence feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_alternative_sequence_feature
+  source: protein
+  target: alternative_sequence feature
+  label_in_input: protein_has_alternative_sequence_feature
+  properties: *id002
+protein has repeat feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_repeat_feature
+  source: protein
+  target: repeat feature
+  label_in_input: protein_has_repeat_feature
+  properties: *id002
+protein has transit_peptide feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_transit_peptide_feature
+  source: protein
+  target: transit_peptide feature
+  label_in_input: protein_has_transit_peptide_feature
+  properties: *id002
+protein has non_terminal_residue feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_non_terminal_residue_feature
+  source: protein
+  target: non_terminal_residue feature
+  label_in_input: protein_has_non_terminal_residue_feature
+  properties: *id002
+protein has zinc_finger feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_zinc_finger_feature
+  source: protein
+  target: zinc_finger feature
+  label_in_input: protein_has_zinc_finger_feature
+  properties: *id002
+protein has lipidation feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_lipidation_feature
+  source: protein
+  target: lipidation feature
+  label_in_input: protein_has_lipidation_feature
+  properties: *id002
+protein has natural_variant feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_natural_variant_feature
+  source: protein
+  target: natural_variant feature
+  label_in_input: protein_has_natural_variant_feature
+  properties: *id002
+protein has dna_binding feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_dna_binding_feature
+  source: protein
+  target: dna_binding feature
+  label_in_input: protein_has_dna_binding_feature
+  properties: *id002
+protein has initiator_methionine feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_initiator_methionine_feature
+  source: protein
+  target: initiator_methionine feature
+  label_in_input: protein_has_initiator_methionine_feature
+  properties: *id002
+protein has non_standard_residue feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_non_standard_residue_feature
+  source: protein
+  target: non_standard_residue feature
+  label_in_input: protein_has_non_standard_residue_feature
+  properties: *id002
+protein has sequence_uncertainty feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_sequence_uncertainty_feature
+  source: protein
+  target: sequence_uncertainty feature
+  label_in_input: protein_has_sequence_uncertainty_feature
+  properties: *id002
+protein has non_adjacent_residues feature:
+  is_a: protein has feature
+  represented_as: edge
+  label_as_edge: protein_has_non_adjacent_residues_feature
+  source: protein
+  target: non_adjacent_residues feature
+  label_in_input: protein_has_non_adjacent_residues_feature
+  properties: *id002
+keyword category:
+  represented_as: node
+  preferred_id: uniprot.keyword_category
+  label_in_input: keyword_category
+  properties:
+    name: str
+go term:
+  represented_as: node
+  preferred_id: go
+  label_in_input: go_term
+  properties:
+    name: str
+keyword in category:
+  represented_as: edge
+  label_as_edge: keyword_in_category
+  source: uniprot keyword
+  target: keyword category
+  label_in_input: keyword_in_category
+keyword is a:
+  represented_as: edge
+  label_as_edge: keyword_is_a
+  source: uniprot keyword
+  target: uniprot keyword
+  label_in_input: keyword_is_a
+keyword mapped to go:
+  represented_as: edge
+  label_as_edge: keyword_mapped_to_go
+  source: uniprot keyword
+  target: go term
+  label_in_input: keyword_mapped_to_go
