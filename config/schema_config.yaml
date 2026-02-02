@@ -29,6 +29,8 @@ protein:
     organism_id: int
     sequence: str
     prott5_embedding: float[]
+    esm2_embedding: float[]
+    nt_embedding: float[]
     entryType: str
     primaryAccession: str
     secondaryAccessions: str
@@ -1062,7 +1064,7 @@ protein has comment:
     value: str
     name: str
     database: str
-    id: str
+    cofactorCrossReference_id: str
     commentType: str
     diseaseId: str
     diseaseAccession: str
@@ -1112,6 +1114,8 @@ protein has comment:
     resourceName: str
     resourceUrl: str
     sequence: str
+    start: str
+    end: str
     sequenceCautionType: str
     location: str
     location_id: str
@@ -1133,7 +1137,7 @@ protein has feature:
     alternativeSequences: str
     description: str
     database: str
-    id: str
+    featureCrossReferences_id: str
     featureId: str
     name: str
     ligand_id: str
@@ -1144,6 +1148,7 @@ protein has feature:
     ligandPart_note: str
     value: str
     modifier: str
+    start: str
     end: str
     end_modifier: str
     sequence: str
@@ -1174,10 +1179,10 @@ protein has subunit comment:
 protein has domain comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_domain
+  label_as_edge: protein_has_domain_comment
   source: protein
   target: domain annotation
-  label_in_input: protein_has_domain
+  label_in_input: protein_has_domain_comment
   properties: *id001
 protein has activity_regulation comment:
   is_a: protein has comment

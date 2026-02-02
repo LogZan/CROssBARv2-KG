@@ -45,6 +45,7 @@ args = parser.parse_args()
 
 # Calculate output_dir_path from config
 output_dir_path = str(project_root / crossbar_config['settings'].get('output_dir', 'biocypher-out'))
+csv_output_dir = Path(output_dir_path).parent / "csv"
 stats_version = args.stats_version or Path(output_dir_path).name
 stats_dir = project_root / "stats" / stats_version
 stats_dir.mkdir(parents=True, exist_ok=True)
@@ -176,9 +177,14 @@ uniprot_json_path = config['data_paths']['uniprot_json']
 interpro_dir_path = config['data_paths']['interpro_dir']
 
 # Embedding file paths
-prott5_embedding_path = f"{embeddings_dir}/{config['embeddings']['prott5']}"
-esm2_embedding_path = f"{embeddings_dir}/{config['embeddings']['esm2']}"
-nt_embedding_path = f"{embeddings_dir}/{config['embeddings']['nucleotide_transformer']}"
+emb_cfg = config.get("embeddings", {}) or {}
+prott5_name = emb_cfg.get("prott5")
+esm2_name = emb_cfg.get("esm2")
+nt_name = emb_cfg.get("nucleotide_transformer")
+
+prott5_embedding_path = f"{embeddings_dir}/{prott5_name}" if prott5_name else None
+esm2_embedding_path = f"{embeddings_dir}/{esm2_name}" if esm2_name else None
+nt_embedding_path = f"{embeddings_dir}/{nt_name}" if nt_name else None
 selformer_drug_embedding_path = f"{embeddings_dir}/{config['embeddings']['selformer_drug']}"
 selformer_compound_embedding_path = f"{embeddings_dir}/{config['embeddings']['selformer_compound']}"
 doc2vec_disease_embedding_path = f"{embeddings_dir}/{config['embeddings']['doc2vec_disease']}"
@@ -295,9 +301,10 @@ STATS_LOGGER = logging.getLogger("crossbar_stats")
 if not STATS_LOGGER.handlers:
     logging.basicConfig(
         level=logging.INFO,
-        format="[{asctime}] [STATS] {message}",
+        format="[STATS] {message}",
         style="{",
     )
+STATS_LOGGER.disabled = True
 
 ADAPTER_ORDER = [
     "uniprot",
@@ -483,10 +490,13 @@ class StatsManager:
     def _get_header_columns(self, type_name: str, info: dict) -> list:
         if info["header_files"]:
             header_path = self.output_dir / info["header_files"][0]
-            return _read_header_columns(header_path)
+            if header_path.exists():
+                return _read_header_columns(header_path)
         for data_file in info["data_files"]:
             if _is_single_data_file(data_file):
-                return _read_header_columns(self.output_dir / data_file)
+                data_path = self.output_dir / data_file
+                if data_path.exists():
+                    return _read_header_columns(data_path)
         STATS_LOGGER.warning(f"No header found for type {type_name}")
         return []
 
@@ -495,6 +505,8 @@ class StatsManager:
         size_bytes = 0
         for filename in info["data_files"]:
             path = self.output_dir / filename
+            if not path.exists():
+                continue
             size_bytes += path.stat().st_size
             lines = _count_lines(path)
             if _is_single_data_file(filename):
@@ -502,7 +514,9 @@ class StatsManager:
             else:
                 row_count += lines
         for filename in info["header_files"]:
-            size_bytes += (self.output_dir / filename).stat().st_size
+            path = self.output_dir / filename
+            if path.exists():
+                size_bytes += path.stat().st_size
         return row_count, size_bytes
 
     def _compute_schema_rows(self, adapter_name: str) -> list:
@@ -765,6 +779,8 @@ bc = BioCypher(
 # Load settings from config and CLI args
 CACHE = args.cache
 export_as_csv = crossbar_config['settings']['export_csv']
+if export_as_csv:
+    csv_output_dir.mkdir(parents=True, exist_ok=True)
 TEST_MODE = args.test_mode
 UPDATE_SCHEMA_DYNAMICALLY = crossbar_config['settings']['update_schema_dynamically']
 ORGANISM = crossbar_config['settings']['organism']
@@ -891,13 +907,46 @@ def run_uniprot():
 
     uniprot_nodes = list(uniprot_adapter.get_nodes())
     uniprot_edges = list(uniprot_adapter.get_edges())
+    # Normalize edge properties per label to avoid BioCypher schema mismatch
+    if uniprot_edges:
+        cleaned_edges = []
+        id_prop_count = 0
+        label_keys: dict[str, set[str]] = {}
+        for edge in uniprot_edges:
+            if edge and len(edge) == 5:
+                props = edge[4] if isinstance(edge[4], dict) else {}
+                props = dict(props)
+                if "id" in props:
+                    id_prop_count += 1
+                    props.pop("id", None)
+                label = edge[3]
+                label_keys.setdefault(label, set()).update(props.keys())
+                cleaned_edges.append((edge[0], edge[1], edge[2], label, props))
+            else:
+                cleaned_edges.append(edge)
+
+        normalized_edges = []
+        for edge in cleaned_edges:
+            if edge and len(edge) == 5:
+                label = edge[3]
+                props = dict(edge[4]) if isinstance(edge[4], dict) else {}
+                for key in label_keys.get(label, set()):
+                    if key not in props:
+                        props[key] = ""
+                normalized_edges.append((edge[0], edge[1], edge[2], label, props))
+            else:
+                normalized_edges.append(edge)
+
+        if id_prop_count:
+            print(f"[WARN] Removed 'id' property from {id_prop_count} UniProt edges.")
+        uniprot_edges = normalized_edges
 
     # Write nodes and edges (includes extended types)
     bc.write_nodes(uniprot_nodes)
     bc.write_edges(uniprot_edges)
 
     if export_as_csv:
-        uniprot_adapter.export_data_to_csv(path=output_dir_path,
+        uniprot_adapter.export_data_to_csv(path=str(csv_output_dir),
                                             node_data=uniprot_nodes,
                                             edge_data=uniprot_edges)
     print(f"SwissProt data exported to CSV successfully.")
@@ -1133,7 +1182,7 @@ run_adapter("tfgene", run_tfgene)
 
 # Write import call and other post-processing
 bc.write_import_call()
-bc.summary()
+# bc.summary()  # Disabled: ontology summary can hang on multiple inheritance
 
 print("="*80)
 print("Script completed successfully!")

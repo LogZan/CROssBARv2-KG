@@ -11,8 +11,8 @@ sleep 2
 #     LATEST_DIR=$(ls -td /biocypher-out/*/ 2>/dev/null | head -1)
 # fi
 
-# Use the v1.0 output directory
-LATEST_DIR="/biocypher-out/v1.0/"
+# Use the output directory
+LATEST_DIR="/biocypher-out/v1.1/"
 
 if [ -z "$LATEST_DIR" ]; then
     echo "ERROR: No output directories found in /biocypher-out/"

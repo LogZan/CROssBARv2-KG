@@ -3,13 +3,13 @@
 # General settings
 settings:
   test_mode: true                     # Limit data for testing (100 entries)
-  test_limit: 10                      # Max entries in test mode
+  test_limit: 1000                      # Max entries in test mode
   cache: true                          # Cache data by pypath for future usage
-  export_csv: true                     # Export node and edge files as CSV
+  export_csv: true                      # Export node and edge files as CSV
   update_schema_dynamically: false      # Auto-update schema with new annotation/feature types
   organism: "*"                       # NCBI taxonomy ID (9606=human, "*"=all)
   use_embeddings: true                  # Load and use embeddings (set false to skip for faster processing)
-  output_dir: "biocypher-out-test/v1.1"  # Output directory (use specific dir to resume, or "biocypher-out" for new timestamped dir)
+  output_dir: "biocypher-out/v1.1"  # Output directory (use specific dir to resume, or "biocypher-out" for new timestamped dir)
 
 # Checkpoint settings for resumable execution
 checkpoint:
@@ -26,9 +26,9 @@ data_paths:
 
 # Embedding file names (relative to embeddings_dir)
 embeddings:
-  prott5: 'prott5_protein_embeddings.h5'
+  # prott5: 'prott5_protein_embeddings.h5'
   esm2: 'esm2_t33_650M_UR50D_protein_embedding.h5'
-  nucleotide_transformer: 'nucleotide_transformerv2_2.5b_multispecies_embeddings.h5'
+  # nucleotide_transformer: 'nucleotide_transformerv2_2.5b_multispecies_embeddings.h5'
   selformer_drug: 'selformer_drug_embeddings.h5'
   selformer_compound: 'selformer_compound_embeddings.h5'
   doc2vec_disease: 'doc2vec_disease_embedding.h5'
