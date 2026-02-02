@@ -8,7 +8,7 @@ settings:
   update_schema_dynamically: false      # Auto-update schema with new annotation/feature types
   organism: "*"                       # NCBI taxonomy ID (9606=human, "*"=all)
   use_embeddings: false                 # Load and use embeddings (set false to skip for faster processing)
-  output_dir: "biocypher-out/v1.0"  # Output directory (use specific dir to resume, or "biocypher-out" for new timestamped dir)
+  output_dir: "biocypher-out-test/v1.1"  # Output directory (use specific dir to resume, or "biocypher-out" for new timestamped dir)
 
 # Checkpoint settings for resumable execution
 checkpoint:
@@ -102,9 +102,12 @@ uniprot:
 keywords:
   node_types:
     - KEYWORD
+    - KEYWORD_CATEGORY
+    - GO_TERM
   edge_types:
-    - KEYWORD_HIERARCHY
-    - KEYWORD_TO_GO
+    - KEYWORD_TO_CATEGORY
+    - KEYWORD_TO_PARENT
+    - KEYWORD_TO_GO_TERM
 
 # Pathway configuration
 pathway:

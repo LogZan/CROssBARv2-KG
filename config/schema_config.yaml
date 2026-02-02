@@ -589,10 +589,12 @@ gene to gene regulatory association:
     pubmed_id: str[]
     tf_effect: str
 uniprot keyword:
+  is_a: keyword
   represented_as: node
   preferred_id: uniprot.keyword
   label_in_input: uniprot_keyword
   properties:
+    keyword_id: str
     name: str
     category: str
     definition: str
@@ -600,6 +602,7 @@ uniprot keyword:
     reviewedProteinCount: int
     unreviewedProteinCount: int
 uniprot disease:
+  is_a: disease
   represented_as: node
   preferred_id: uniprot_disease
   label_in_input: uniprot_disease
@@ -610,26 +613,32 @@ uniprot disease:
     description: str
     diseaseCrossReferenceId: str
 protein description:
+  is_a: description
   represented_as: node
   preferred_id: internal
   label_in_input: protein_description
 recommended name:
+  is_a: description
   represented_as: node
   preferred_id: internal
   label_in_input: recommended_name
 alternative name:
+  is_a: description
   represented_as: node
   preferred_id: internal
   label_in_input: alternative_name
 extra attributes:
+  is_a: description
   represented_as: node
   preferred_id: internal
   label_in_input: extra_attributes
 functional annotation:
+  is_a: description
   represented_as: node
   preferred_id: internal
   label_in_input: functional_annotation
 sequence feature:
+  is_a: description
   represented_as: node
   preferred_id: internal
   label_in_input: sequence_feature
@@ -1659,30 +1668,37 @@ protein has non_adjacent_residues feature:
   label_in_input: protein_has_non_adjacent_residues_feature
   properties: *id002
 keyword category:
+  is_a: keyword
   represented_as: node
   preferred_id: uniprot.keyword_category
   label_in_input: keyword_category
   properties:
+    category_id: str
     name: str
 go term:
+  is_a: go
   represented_as: node
   preferred_id: go
   label_in_input: go_term
   properties:
+    go_id: str
     name: str
 keyword in category:
+  is_a: association
   represented_as: edge
   label_as_edge: keyword_in_category
   source: uniprot keyword
   target: keyword category
   label_in_input: keyword_in_category
 keyword is a:
+  is_a: association
   represented_as: edge
-  label_as_edge: keyword_is_a
+  label_as_edge: keyword_has_parent
   source: uniprot keyword
   target: uniprot keyword
-  label_in_input: keyword_is_a
+  label_in_input: keyword_has_parent
 keyword mapped to go:
+  is_a: association
   represented_as: edge
   label_as_edge: keyword_mapped_to_go
   source: uniprot keyword

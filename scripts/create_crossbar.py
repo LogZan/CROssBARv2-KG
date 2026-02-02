@@ -872,36 +872,35 @@ def run_uniprot():
     if UPDATE_SCHEMA_DYNAMICALLY:
         print("Updating schema with dynamically discovered annotation/feature types...")
         schema_path = str(project_root / "config/schema_config.yaml")
-        annotation_types = set(uniprot_adapter.annotation_nodes.keys())
-        feature_types = set(uniprot_adapter.feature_nodes.keys())
+        uniprot_nodes = list(uniprot_adapter.get_nodes())
+        annotation_types = {ntype for _, ntype, _ in uniprot_nodes if ntype.endswith("_annotation")}
+        feature_types = {ntype for _, ntype, _ in uniprot_nodes if ntype.endswith("_feature")}
         update_schema_with_dynamic_types(schema_path, annotation_types, feature_types)
         print("Schema updated. Please restart the script for changes to take effect.")
         sys.exit(0)
 
-    uniprot_nodes = uniprot_adapter.get_nodes()
-    uniprot_edges = uniprot_adapter.get_edges()
+    uniprot_nodes = list(uniprot_adapter.get_nodes())
+    uniprot_edges = list(uniprot_adapter.get_edges())
 
-    # Write basic nodes and edges
+    # Write nodes and edges (includes extended types)
     bc.write_nodes(uniprot_nodes)
     bc.write_edges(uniprot_edges)
 
-    # Write extended nodes and edges from SwissProt
-    uniprot_extended_nodes = uniprot_adapter.get_all_extended_nodes()
-    uniprot_extended_edges = uniprot_adapter.get_all_extended_edges()
-
-    bc.write_nodes(uniprot_extended_nodes)
-    bc.write_edges(uniprot_extended_edges)
-
-    print(f"SwissProt extended nodes and edges written successfully.")
     if export_as_csv:
         uniprot_adapter.export_data_to_csv(path=output_dir_path,
                                             node_data=uniprot_nodes,
                                             edge_data=uniprot_edges)
     print(f"SwissProt data exported to CSV successfully.")
-    print(f"  Annotation types: {len(uniprot_adapter.annotation_nodes)}")
-    print(f"  Feature types: {len(uniprot_adapter.feature_nodes)}")
-    print(f"  Disease nodes: {len(uniprot_adapter.disease_nodes)}")
-    print(f"  Proteins with keywords: {len(uniprot_adapter.protein_keywords)}")
+    annotation_types = {ntype for _, ntype, _ in uniprot_nodes if ntype.endswith("_annotation")}
+    feature_types = {ntype for _, ntype, _ in uniprot_nodes if ntype.endswith("_feature")}
+    disease_nodes = [n for n in uniprot_nodes if n[1] == "uniprot_disease"]
+    protein_with_keywords = {
+        source for _, source, target, label, _ in uniprot_edges if label == "protein_has_keyword"
+    }
+    print(f"  Annotation types: {len(annotation_types)}")
+    print(f"  Feature types: {len(feature_types)}")
+    print(f"  Disease nodes: {len(disease_nodes)}")
+    print(f"  Proteins with keywords: {len(protein_with_keywords)}")
 
 run_adapter("uniprot", run_uniprot)
 
@@ -914,23 +913,21 @@ def run_keywords():
 
     keywords_adapter = UniprotKeywords(
         json_path=crossbar_config['data_paths']['uniprot_keywords_json'],
-        node_types=[getattr(KeywordNodeType, nt) for nt in crossbar_config['keywords']['node_types']],
-        edge_types=[getattr(KeywordEdgeType, et) for et in crossbar_config['keywords']['edge_types']],
+        node_types=[getattr(KeywordNodeType, nt).value for nt in crossbar_config['keywords']['node_types']],
+        edge_types=[getattr(KeywordEdgeType, et).value for et in crossbar_config['keywords']['edge_types']],
         test_mode=TEST_MODE,
     )
-
-    keywords_adapter.download_data(cache=CACHE)
 
     # Write keyword nodes
     keyword_nodes = keywords_adapter.get_nodes()
     bc.write_nodes(keyword_nodes)
 
     # Write keyword edges (hierarchy and GO mappings)
-    keyword_edges = keywords_adapter.get_edges()
-    bc.write_edges(keyword_edges)
+    keyword_edges = list(keywords_adapter.get_edges())
+    if keyword_edges:
+        bc.write_edges(keyword_edges)
 
     print(f"UniProt Keywords written successfully.")
-    print(f"  Keywords loaded: {len(keywords_adapter.keywords_data)}")
 
 run_adapter("keywords", run_keywords)
 

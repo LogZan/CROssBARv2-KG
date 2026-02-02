@@ -88,10 +88,14 @@ adapter.download_uniprot_data()
 
 print(f"   Loaded {len(adapter.uniprot_ids)} protein entries")
 
-# Get basic nodes
-print("\n3. Getting basic nodes (protein, gene, organism)...")
+# Get nodes
+print("\n3. Getting nodes (protein, gene, organism, extended)...")
 nodes = list(adapter.get_nodes())
-print(f"   Generated {len(nodes)} basic nodes")
+basic_node_labels = {"protein", "gene", "organism"}
+basic_nodes = [n for n in nodes if n[1] in basic_node_labels]
+extended_nodes = [n for n in nodes if n[1] not in basic_node_labels]
+print(f"   Generated {len(basic_nodes)} basic nodes")
+print(f"   Generated {len(extended_nodes)} extended nodes")
 
 # Show sample nodes
 print("\n   Sample basic nodes:")
@@ -102,37 +106,31 @@ for node_id, node_type, props in nodes[:6]:
         print(f"   - [{node_type}] {node_id}")
         print(f"     Props: {list(props.keys())[:5]}...")
 
-# Get extended nodes
-print("\n4. Getting extended nodes (annotations, features, diseases)...")
-extended_nodes = list(adapter.get_all_extended_nodes())
-print(f"   Generated {len(extended_nodes)} extended nodes")
-
 # Show extended node types
-print("\n   Extended node types found:")
+print("\n4. Extended node types found:")
 ext_node_types = {}
 for node_id, node_type, props in extended_nodes:
     ext_node_types[node_type] = ext_node_types.get(node_type, 0) + 1
 for ntype, count in sorted(ext_node_types.items()):
     print(f"   - {ntype}: {count}")
 
-# Get basic edges
-print("\n5. Getting basic edges...")
+# Get edges
+print("\n5. Getting edges...")
 edges = list(adapter.get_edges())
-print(f"   Generated {len(edges)} basic edges")
+basic_edge_labels = {"Protein_belongs_to_organism", "Gene_encodes_protein"}
+basic_edges = [e for e in edges if e[3] in basic_edge_labels]
+extended_edges = [e for e in edges if e[3] not in basic_edge_labels]
+print(f"   Generated {len(basic_edges)} basic edges")
+print(f"   Generated {len(extended_edges)} extended edges")
 
 # Show sample basic edges
 print("\n   Sample basic edges:")
-for edge in edges[:3]:
+for edge in basic_edges[:3]:
     _, source, target, label, _ = edge
     print(f"   - {source} --[{label}]--> {target}")
 
-# Get extended edges
-print("\n6. Getting extended edges (keywords, annotations, features, diseases, interactions)...")
-extended_edges = list(adapter.get_all_extended_edges())
-print(f"   Generated {len(extended_edges)} extended edges")
-
 # Show extended edge types and counts
-print("\n   Extended edge types:")
+print("\n6. Extended edge types:")
 ext_edge_types = {}
 for _, source, target, label, props in extended_edges:
     ext_edge_types[label] = ext_edge_types.get(label, 0) + 1
@@ -154,19 +152,29 @@ for edge in extended_edges[:5]:
         print(f"     Props: {extra_props}")
 
 # Summary
+annotation_node_types = {ntype for _, ntype, _ in extended_nodes if ntype.endswith("_annotation")}
+feature_node_types = {ntype for _, ntype, _ in extended_nodes if ntype.endswith("_feature")}
+disease_nodes = [n for n in extended_nodes if n[1] == "uniprot_disease"]
+protein_with_keywords = {
+    source for _, source, target, label, _ in extended_edges if label == "protein_has_keyword"
+}
+protein_with_interactions = {
+    source for _, source, target, label, _ in extended_edges if label == "Protein_interacts_with_protein"
+}
+
 print("\n" + "=" * 60)
 print("Test Summary")
 print("=" * 60)
 print(f"   Protein entries: {len(adapter.uniprot_ids)}")
-print(f"   Basic nodes: {len(nodes)}")
+print(f"   Basic nodes: {len(basic_nodes)}")
 print(f"   Extended nodes: {len(extended_nodes)}")
-print(f"   Basic edges: {len(edges)}")
+print(f"   Basic edges: {len(basic_edges)}")
 print(f"   Extended edges: {len(extended_edges)}")
-print(f"   Annotation types: {len(adapter.annotation_nodes)}")
-print(f"   Feature types: {len(adapter.feature_nodes)}")
-print(f"   Disease nodes: {len(adapter.disease_nodes)}")
-print(f"   Proteins with keywords: {len(adapter.protein_keywords)}")
-print(f"   Proteins with interactions: {len(adapter.protein_interactions)}")
+print(f"   Annotation types: {len(annotation_node_types)}")
+print(f"   Feature types: {len(feature_node_types)}")
+print(f"   Disease nodes: {len(disease_nodes)}")
+print(f"   Proteins with keywords: {len(protein_with_keywords)}")
+print(f"   Proteins with interactions: {len(protein_with_interactions)}")
 print("=" * 60)
 print("Test completed successfully!")
 print("=" * 60)
