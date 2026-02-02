@@ -284,8 +284,8 @@ def log_adapter_boundary(adapter_name: str, phase: str):
     timestamp = datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
     if phase == "start":
         print(f"\n{separator}")
-        print(f"[{timestamp}] [START] {adapter_name} adapter")
-        print(f"{separator}")
+        print(f"[{timestamp}] [{timestamp}] [START] {adapter_name} adapter")
+        print(f"[{timestamp}] {separator}")
     else:
         print(f"[{timestamp}] [END] {adapter_name} adapter")
         print(f"{separator}\n")
@@ -768,7 +768,7 @@ export_as_csv = crossbar_config['settings']['export_csv']
 TEST_MODE = args.test_mode
 UPDATE_SCHEMA_DYNAMICALLY = crossbar_config['settings']['update_schema_dynamically']
 ORGANISM = crossbar_config['settings']['organism']
-USE_EMBEDDINGS = crossbar_config['settings']['use_embeddings'] and not TEST_MODE
+USE_EMBEDDINGS = crossbar_config['settings']['use_embeddings']
 
 stats_manager = StatsManager(output_dir_path, stats_dir, TEST_MODE)
 
@@ -862,6 +862,16 @@ def run_uniprot():
         id_fields=uniprot_id_type,
         test_mode=TEST_MODE,
     )
+    if TEST_MODE:
+        uniprot_adapter.test_limit = crossbar_config['settings'].get('test_limit', uniprot_adapter.test_limit)
+
+    timestamp = datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
+    print(
+        f"[{timestamp}] UniprotSwissprot init: organism={ORGANISM}, "
+        f"test_mode={TEST_MODE}, test_limit={uniprot_adapter.test_limit}, "
+        f"nodes={len(uniprot_node_types)}, edges={len(uniprot_edge_types)}, "
+        f"node_fields={len(uniprot_node_fields)}, id_fields={len(uniprot_id_type)}"
+    )
 
     uniprot_adapter.download_uniprot_data(cache=CACHE,
         prott5_embedding_output_path=prott5_embedding_path if USE_EMBEDDINGS else None,
@@ -917,6 +927,8 @@ def run_keywords():
         edge_types=[getattr(KeywordEdgeType, et).value for et in crossbar_config['keywords']['edge_types']],
         test_mode=TEST_MODE,
     )
+    if TEST_MODE:
+        keywords_adapter.test_limit = crossbar_config['settings'].get('test_limit', keywords_adapter.test_limit)
 
     # Write keyword nodes
     keyword_nodes = keywords_adapter.get_nodes()

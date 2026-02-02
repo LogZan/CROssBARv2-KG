@@ -3,11 +3,12 @@
 # General settings
 settings:
   test_mode: true                     # Limit data for testing (100 entries)
+  test_limit: 10                      # Max entries in test mode
   cache: true                          # Cache data by pypath for future usage
   export_csv: true                     # Export node and edge files as CSV
   update_schema_dynamically: false      # Auto-update schema with new annotation/feature types
   organism: "*"                       # NCBI taxonomy ID (9606=human, "*"=all)
-  use_embeddings: false                 # Load and use embeddings (set false to skip for faster processing)
+  use_embeddings: true                  # Load and use embeddings (set false to skip for faster processing)
   output_dir: "biocypher-out-test/v1.1"  # Output directory (use specific dir to resume, or "biocypher-out" for new timestamped dir)
 
 # Checkpoint settings for resumable execution
