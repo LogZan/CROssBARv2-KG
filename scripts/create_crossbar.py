@@ -939,10 +939,20 @@ def run_uniprot():
 
         if id_prop_count:
             print(f"[WARN] Removed 'id' property from {id_prop_count} UniProt edges.")
-        uniprot_edges = normalized_edges
+        # Normalize edge labels to capitalized form to match schema labels.
+        uniprot_edges = []
+        for edge in normalized_edges:
+            if edge and len(edge) == 5:
+                label = edge[3]
+                if isinstance(label, str) and label:
+                    label = label[0].upper() + label[1:]
+                uniprot_edges.append((edge[0], edge[1], edge[2], label, edge[4]))
+            else:
+                uniprot_edges.append(edge)
 
     # Write nodes and edges (includes extended types)
     bc.write_nodes(uniprot_nodes)
+    # Use standard writer for UniProt edges to ensure header/relationship registration.
     bc.write_edges(uniprot_edges)
 
     if export_as_csv:
@@ -986,7 +996,16 @@ def run_keywords():
     # Write keyword edges (hierarchy and GO mappings)
     keyword_edges = list(keywords_adapter.get_edges())
     if keyword_edges:
-        bc.write_edges(keyword_edges)
+        normalized_keyword_edges = []
+        for edge in keyword_edges:
+            if edge and len(edge) == 5:
+                label = edge[3]
+                if isinstance(label, str) and label:
+                    label = label[0].upper() + label[1:]
+                normalized_keyword_edges.append((edge[0], edge[1], edge[2], label, edge[4]))
+            else:
+                normalized_keyword_edges.append(edge)
+        bc.write_edges(normalized_keyword_edges)
 
     print(f"UniProt Keywords written successfully.")
 

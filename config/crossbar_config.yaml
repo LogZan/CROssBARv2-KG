@@ -3,13 +3,13 @@
 # General settings
 settings:
   test_mode: true                     # Limit data for testing (100 entries)
-  test_limit: 1000                      # Max entries in test mode
+  test_limit: 5000                      # Max entries in test mode
   cache: true                          # Cache data by pypath for future usage
-  export_csv: true                      # Export node and edge files as CSV
+  export_csv: false                      # Export node and edge files as CSV
   update_schema_dynamically: false      # Auto-update schema with new annotation/feature types
   organism: "*"                       # NCBI taxonomy ID (9606=human, "*"=all)
   use_embeddings: true                  # Load and use embeddings (set false to skip for faster processing)
-  output_dir: "biocypher-out/v1.1"  # Output directory (use specific dir to resume, or "biocypher-out" for new timestamped dir)
+  output_dir: "biocypher-out/v1.2"  # Output directory (use specific dir to resume, or "biocypher-out" for new timestamped dir)
 
 # Checkpoint settings for resumable execution
 checkpoint:
@@ -54,39 +54,56 @@ uniprot:
     - PROTEIN
     - GENE
     - ORGANISM
+    - CELLULAR_COMPARTMENT
+    - UNIPROT_KEYWORD
+    - EXTRA_ATTRIBUTES
+    - PROTEIN_DESCRIPTION
+    - RECOMMENDED_NAME
+    - ALTERNATIVE_NAME
     - FUNCTIONAL_ANNOTATION
     - SEQUENCE_FEATURE
     - UNIPROT_DISEASE
 
   node_fields:
-    - PRIMARY_GENE_NAME
     - LENGTH
+    - SUBCELLULAR_LOCATION
     - MASS
     - ORGANISM
     - ORGANISM_ID
     - PROTEIN_NAMES
+    - EC
     - PROTEIN_GENE_NAMES
+    - PRIMARY_GENE_NAME
+    - SEQUENCE
     - ENSEMBL_TRANSCRIPT_IDS
-    - ENSEMBL_GENE_IDS
+    - PROTEOME
     - ENTREZ_GENE_IDS
     - KEGG_IDS
-    - PROTEOME
-    - SEQUENCE
+    - ENSEMBL_GENE_IDS
+    - PROTT5_EMBEDDING
+    - ESM2_EMBEDDING
+    - NT_EMBEDDING
     - UNIPROT_KB_ID
     - SECONDARY_ACCESSIONS
     - PROTEIN_EXISTENCE
     - ANNOTATION_SCORE
     - FIRST_PUBLIC_DATE
     - LAST_ANNOTATION_UPDATE_DATE
+    - LAST_SEQUENCE_UPDATE_DATE
     - ENTRY_VERSION
     - SEQUENCE_VERSION
     - RECOMMENDED_SHORT_NAMES
     - EC_NUMBERS
     - ALTERNATIVE_NAMES_JSON
     - PROTEIN_FLAG
-    - PROTT5_EMBEDDING
-    - ESM2_EMBEDDING
-    - NT_EMBEDDING
+    - SEQUENCE_CRC64
+    - SEQUENCE_MD5
+    - ORGANISM_COMMON_NAME
+    - ORGANISM_SYNONYMS
+    - ORGANISM_LINEAGE
+    - GENE_ORF_NAMES
+    - GENE_ORDERED_LOCUS_NAMES
+    - GENE_LOCATION
 
   edge_types:
     - PROTEIN_TO_ORGANISM
@@ -95,9 +112,17 @@ uniprot:
     - PROTEIN_TO_ANNOTATION
     - PROTEIN_TO_FEATURE
     - PROTEIN_TO_DISEASE
+    - PROTEIN_INTERACTS_PROTEIN
+    - PROTEIN_TO_EXTRA_ATTRIBUTES
+    - PROTEIN_TO_PROTEIN_DESCRIPTION
+    - PROTEIN_DESCRIPTION_TO_RECOMMENDED_NAME
+    - PROTEIN_DESCRIPTION_TO_ALTERNATIVE_NAME
 
   id_fields:
+    - PROTEIN_UNIPROT_ACCESSION
     - GENE_ENTREZ_ID
+    - ORGANISM_NCBI_TAXONOMY_ID
+    - GENE_ENSEMBL_GENE_ID
 
 # UniProt Keywords configuration
 keywords:

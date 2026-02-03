@@ -12,7 +12,7 @@ sleep 2
 # fi
 
 # Use the output directory
-LATEST_DIR="/biocypher-out/v1.1/"
+LATEST_DIR="/biocypher-out/v1.2/"
 
 if [ -z "$LATEST_DIR" ]; then
     echo "ERROR: No output directories found in /biocypher-out/"

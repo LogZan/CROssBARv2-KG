@@ -205,10 +205,10 @@ protein to organism taxon association:
 post translational interaction:
   is_a: pairwise molecular interaction
   represented_as: edge
-  label_as_edge: Protein_interacts_with_protein
+  label_as_edge: Protein_has_post_translational_interaction
   source: protein
   target: protein
-  label_in_input: Protein_interacts_with_protein
+  label_in_input: Protein_has_post_translational_interaction
   properties:
     source: str[]
     pubmed_ids: str[]
@@ -220,20 +220,20 @@ post translational interaction:
 protein to protein domain association:
   is_a: association
   represented_as: edge
-  label_as_edge: protein_has_domain
+  label_as_edge: Protein_has_domain
   source: protein
   target: protein domain
-  label_in_input: protein_has_domain
+  label_in_input: Protein_has_domain
   properties:
     start: str
     end: str
 protein to biological process association:
   is_a: GeneToGoTermAssociation
   represented_as: edge
-  label_as_edge: protein_involved_in_biological_process
+  label_as_edge: Protein_involved_in_biological_process
   source: protein
   target: biological process
-  label_in_input: protein_involved_in_biological_process
+  label_in_input: Protein_involved_in_biological_process
   properties:
     reference: str
     evidence_code: str
@@ -245,10 +245,7 @@ protein to cellular component association:
   - protein_part_of_cellular_component
   - protein_is_active_in_cellular_component
   target: cellular component
-  label_in_input:
-  - protein_located_in_cellular_component
-  - protein_part_of_cellular_component
-  - protein_is_active_in_cellular_component
+  label_in_input: Protein_located_in_cellular_component
   properties:
     reference: str
     evidence_code: str
@@ -259,9 +256,7 @@ protein to molecular function association:
   - protein_enables_molecular_function
   - protein_contributes_to_molecular_function
   target: molecular function
-  label_in_input:
-  - protein_enables_molecular_function
-  - protein_contributes_to_molecular_function
+  label_in_input: Protein_enables_molecular_function
   properties:
     reference: str
     evidence_code: str
@@ -274,11 +269,7 @@ biological process to biological process association:
   - biological_process_positively_regulates_biological_process
   - biological_process_negatively_regulates_biological_process
   target: biological process
-  label_in_input:
-  - biological_process_is_a_biological_process
-  - biological_process_part_of_biological_process
-  - biological_process_positively_regulates_biological_process
-  - biological_process_negatively_regulates_biological_process
+  label_in_input: biological_process_is_a_biological_process
 biological process to molecular function association:
   is_a: association
   represented_as: edge
@@ -286,9 +277,7 @@ biological process to molecular function association:
   - biological_process_positively_regulates_molecular_function
   - biological_process_negatively_regulates_molecular_function
   target: molecular function
-  label_in_input:
-  - biological_process_positively_regulates_molecular_function
-  - biological_process_negatively_regulates_molecular_function
+  label_in_input: biological_process_positively_regulates_molecular_function
 molecular function to molecular function association:
   is_a: association
   represented_as: edge
@@ -298,11 +287,7 @@ molecular function to molecular function association:
   - molecular_function_positively_regulates_molecular_function
   - molecular_function_negatively_regulates_molecular_function
   target: molecular function
-  label_in_input:
-  - molecular_function_is_a_molecular_function
-  - molecular_function_part_of_molecular_function
-  - molecular_function_positively_regulates_molecular_function
-  - molecular_function_negatively_regulates_molecular_function
+  label_in_input: molecular_function_is_a_molecular_function
 cellular component to cellular component association:
   is_a: association
   represented_as: edge
@@ -310,30 +295,28 @@ cellular component to cellular component association:
   - cellular_component_is_a_cellular_component
   - cellular_component_part_of_cellular_component
   target: cellular component
-  label_in_input:
-  - cellular_component_is_a_cellular_component
-  - cellular_component_part_of_cellular_component
+  label_in_input: cellular_component_is_a_cellular_component
 protein domain to molecular function association:
   is_a: association
   represented_as: edge
-  label_as_edge: protein_domain_enables_molecular_function
+  label_as_edge: Protein_domain_enables_molecular_function
   source: protein domain
   target: molecular function
-  label_in_input: protein_domain_enables_molecular_function
+  label_in_input: Protein_domain_enables_molecular_function
 protein domain to biological process association:
   is_a: association
   represented_as: edge
-  label_as_edge: protein_domain_involved_in_biological_process
+  label_as_edge: Protein_domain_involved_in_biological_process
   source: protein domain
   target: biological process
-  label_in_input: protein_domain_involved_in_biological_process
+  label_in_input: Protein_domain_involved_in_biological_process
 protein domain to cellular component association:
   is_a: association
   represented_as: edge
-  label_as_edge: protein_domain_located_in_cellular_component
+  label_as_edge: Protein_domain_located_in_cellular_component
   source: protein domain
   target: cellular component
-  label_in_input: protein_domain_located_in_cellular_component
+  label_in_input: Protein_domain_located_in_cellular_component
 drug to protein association:
   is_a: pairwise molecular interaction
   represented_as: edge
@@ -374,9 +357,7 @@ drug to gene association:
   - drug_downregulates_gene
   - drug_upregulates_gene
   target: gene
-  label_in_input:
-  - drug_downregulates_gene
-  - drug_upregulates_gene
+  label_in_input: drug_downregulates_gene
   properties:
     source: str[]
     references: str[]
@@ -399,10 +380,10 @@ compound to protein association:
 gene to gene orthology association:
   is_a: association
   represented_as: edge
-  label_as_edge: gene_is_orthologous_with_gene
+  label_as_edge: Gene_is_orthologous_with_gene
   source: gene
   target: gene
-  label_in_input: gene_is_orthologous_with_gene
+  label_in_input: Gene_is_orthologous_with_gene
   properties:
     source: str[]
     relation_type: str
@@ -453,10 +434,10 @@ disease to disease comorbidity association:
 gene to disease association:
   is_a: association
   represented_as: edge
-  label_as_edge: gene_is_related_to_disease
+  label_as_edge: Gene_is_related_to_disease
   source: gene
   target: disease
-  label_in_input: gene_is_related_to_disease
+  label_in_input: Gene_is_related_to_disease
   properties:
     source: str[]
     variant_source: str[]
@@ -473,10 +454,10 @@ gene to disease association:
 protein to phenotype association:
   is_a: GeneToPhenotypicFeatureAssociation
   represented_as: edge
-  label_as_edge: protein_is_associated_with_phenotype
+  label_as_edge: Protein_is_associated_with_phenotype
   source: protein
   target: phenotype
-  label_in_input: protein_is_associated_with_phenotype
+  label_in_input: Protein_is_associated_with_phenotype
 phenotype hierarchical association:
   is_a: association
   represented_as: edge
@@ -497,10 +478,10 @@ phenotype to disease association:
 protein to pathway association:
   is_a: GeneToPathwayAssociation
   represented_as: edge
-  label_as_edge: protein_take_part_in_pathway
+  label_as_edge: Protein_take_part_in_pathway
   source: protein
   target: pathway
-  label_in_input: protein_take_part_in_pathway
+  label_in_input: Protein_take_part_in_pathway
   properties:
     source: str
     evidence_code: str
@@ -529,9 +510,7 @@ pathway to pathway association:
   - pathway_is_part_of_pathway
   - pathway_is_equivalent_to_pathway
   target: pathway
-  label_in_input:
-  - pathway_is_part_of_pathway
-  - pathway_is_equivalent_to_pathway
+  label_in_input: pathway_is_part_of_pathway
 reactome hierarchical association:
   is_a: association
   represented_as: edge
@@ -567,10 +546,10 @@ side effect hierarchical association:
 protein to ec number association:
   is_a: ReactionToParticipantAssociation
   represented_as: edge
-  label_as_edge: protein_catalyzes_ec_number
+  label_as_edge: Protein_catalyzes_ec_number
   source: protein
   target: ec number
-  label_in_input: protein_catalyzes_ec_number
+  label_in_input: Protein_catalyzes_ec_number
 ec number hierarchical association:
   is_a: molecular activity to molecular activity association
   represented_as: edge
@@ -581,10 +560,10 @@ ec number hierarchical association:
 gene to gene regulatory association:
   is_a: pairwise gene to gene interaction
   represented_as: edge
-  label_as_edge: gene_regulates_gene
+  label_as_edge: Gene_regulates_gene
   source: gene
   target: gene
-  label_in_input: gene_regulates_gene
+  label_in_input: Gene_regulates_gene
   properties:
     source: str[]
     dorothea_confidence_level: str
@@ -907,17 +886,17 @@ non_adjacent_residues feature:
 protein to keyword association:
   is_a: association
   represented_as: edge
-  label_as_edge: protein_has_keyword
+  label_as_edge: Protein_has_keyword
   source: protein
   target: uniprot keyword
-  label_in_input: protein_has_keyword
+  label_in_input: Protein_has_keyword
 protein to disease association:
   is_a: association
   represented_as: edge
-  label_as_edge: protein_has_disease
+  label_as_edge: Protein_has_disease
   source: protein
   target: uniprot disease
-  label_in_input: protein_has_disease
+  label_in_input: Protein_has_disease
 protein interacts protein:
   is_a: pairwise molecular interaction
   represented_as: edge
@@ -933,10 +912,10 @@ protein interacts protein:
 protein has extra attributes:
   is_a: association
   represented_as: edge
-  label_as_edge: protein_has_extra_attributes
+  label_as_edge: Protein_has_extra_attributes
   source: protein
   target: extra attributes
-  label_in_input: protein_has_extra_attributes
+  label_in_input: Protein_has_extra_attributes
   properties:
     FUNCTION: str
     CATALYTIC ACTIVITY: str
@@ -1007,10 +986,10 @@ protein has extra attributes:
 protein has protein description:
   is_a: association
   represented_as: edge
-  label_as_edge: protein_has_protein_description
+  label_as_edge: Protein_has_protein_description
   source: protein
   target: protein description
-  label_in_input: protein_has_protein_description
+  label_in_input: Protein_has_protein_description
   properties:
     flag: str
     fullName: str
@@ -1032,10 +1011,10 @@ protein has protein description:
 protein description has recommended name:
   is_a: association
   represented_as: edge
-  label_as_edge: protein_description_has_recommended_name
+  label_as_edge: Protein_description_has_recommended_name
   source: protein description
   target: recommended name
-  label_in_input: protein_description_has_recommended_name
+  label_in_input: Protein_description_has_recommended_name
   properties:
     fullName: str
     shortNames: str
@@ -1043,10 +1022,10 @@ protein description has recommended name:
 protein description has alternative name:
   is_a: association
   represented_as: edge
-  label_as_edge: protein_description_has_alternative_name
+  label_as_edge: Protein_description_has_alternative_name
   source: protein description
   target: alternative name
-  label_in_input: protein_description_has_alternative_name
+  label_in_input: Protein_description_has_alternative_name
   properties:
     fullName: str
     ecNumbers: str
@@ -1054,10 +1033,10 @@ protein description has alternative name:
 protein has comment:
   is_a: association
   represented_as: edge
-  label_as_edge: protein_has_comment
+  label_as_edge: Protein_has_comment
   source: protein
   target: functional annotation
-  label_in_input: protein_has_comment
+  label_in_input: Protein_has_comment
   properties: &id001
     max: str
     approximate: str
@@ -1128,10 +1107,10 @@ protein has comment:
 protein has feature:
   is_a: association
   represented_as: edge
-  label_as_edge: protein_has_feature
+  label_as_edge: Protein_has_feature
   source: protein
   target: sequence feature
-  label_in_input: protein_has_feature
+  label_in_input: Protein_has_feature
   properties: &id002
     originalSequence: str
     alternativeSequences: str
@@ -1155,522 +1134,522 @@ protein has feature:
 protein has function comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_function
+  label_as_edge: Protein_has_function
   source: protein
   target: function annotation
-  label_in_input: protein_has_function
+  label_in_input: Protein_has_function
   properties: *id001
 protein has catalytic_activity comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_catalytic_activity
+  label_as_edge: Protein_has_catalytic_activity
   source: protein
   target: catalytic_activity annotation
-  label_in_input: protein_has_catalytic_activity
+  label_in_input: Protein_has_catalytic_activity
   properties: *id001
 protein has subunit comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_subunit
+  label_as_edge: Protein_has_subunit
   source: protein
   target: subunit annotation
-  label_in_input: protein_has_subunit
+  label_in_input: Protein_has_subunit
   properties: *id001
 protein has domain comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_domain_comment
+  label_as_edge: Protein_has_domain_comment
   source: protein
   target: domain annotation
-  label_in_input: protein_has_domain_comment
+  label_in_input: Protein_has_domain_comment
   properties: *id001
 protein has activity_regulation comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_activity_regulation
+  label_as_edge: Protein_has_activity_regulation
   source: protein
   target: activity_regulation annotation
-  label_in_input: protein_has_activity_regulation
+  label_in_input: Protein_has_activity_regulation
   properties: *id001
 protein has biophysicochemical_properties comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_biophysicochemical_properties
+  label_as_edge: Protein_has_biophysicochemical_properties
   source: protein
   target: biophysicochemical_properties annotation
-  label_in_input: protein_has_biophysicochemical_properties
+  label_in_input: Protein_has_biophysicochemical_properties
   properties: *id001
 protein has subcellular_location comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_subcellular_location
+  label_as_edge: Protein_has_subcellular_location
   source: protein
   target: subcellular_location annotation
-  label_in_input: protein_has_subcellular_location
+  label_in_input: Protein_has_subcellular_location
   properties: *id001
 protein has similarity comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_similarity
+  label_as_edge: Protein_has_similarity
   source: protein
   target: similarity annotation
-  label_in_input: protein_has_similarity
+  label_in_input: Protein_has_similarity
   properties: *id001
 protein has alternative_products comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_alternative_products
+  label_as_edge: Protein_has_alternative_products
   source: protein
   target: alternative_products annotation
-  label_in_input: protein_has_alternative_products
+  label_in_input: Protein_has_alternative_products
   properties: *id001
 protein has ptm comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_ptm
+  label_as_edge: Protein_has_ptm
   source: protein
   target: ptm annotation
-  label_in_input: protein_has_ptm
+  label_in_input: Protein_has_ptm
   properties: *id001
 protein has web_resource comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_web_resource
+  label_as_edge: Protein_has_web_resource
   source: protein
   target: web_resource annotation
-  label_in_input: protein_has_web_resource
+  label_in_input: Protein_has_web_resource
   properties: *id001
 protein has mass_spectrometry comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_mass_spectrometry
+  label_as_edge: Protein_has_mass_spectrometry
   source: protein
   target: mass_spectrometry annotation
-  label_in_input: protein_has_mass_spectrometry
+  label_in_input: Protein_has_mass_spectrometry
   properties: *id001
 protein has tissue_specificity comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_tissue_specificity
+  label_as_edge: Protein_has_tissue_specificity
   source: protein
   target: tissue_specificity annotation
-  label_in_input: protein_has_tissue_specificity
+  label_in_input: Protein_has_tissue_specificity
   properties: *id001
 protein has disruption_phenotype comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_disruption_phenotype
+  label_as_edge: Protein_has_disruption_phenotype
   source: protein
   target: disruption_phenotype annotation
-  label_in_input: protein_has_disruption_phenotype
+  label_in_input: Protein_has_disruption_phenotype
   properties: *id001
 protein has miscellaneous comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_miscellaneous
+  label_as_edge: Protein_has_miscellaneous
   source: protein
   target: miscellaneous annotation
-  label_in_input: protein_has_miscellaneous
+  label_in_input: Protein_has_miscellaneous
   properties: *id001
 protein has cofactor comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_cofactor
+  label_as_edge: Protein_has_cofactor
   source: protein
   target: cofactor annotation
-  label_in_input: protein_has_cofactor
+  label_in_input: Protein_has_cofactor
   properties: *id001
 protein has pathway comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_pathway
+  label_as_edge: Protein_has_pathway
   source: protein
   target: pathway annotation
-  label_in_input: protein_has_pathway
+  label_in_input: Protein_has_pathway
   properties: *id001
 protein has developmental_stage comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_developmental_stage
+  label_as_edge: Protein_has_developmental_stage
   source: protein
   target: developmental_stage annotation
-  label_in_input: protein_has_developmental_stage
+  label_in_input: Protein_has_developmental_stage
   properties: *id001
 protein has induction comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_induction
+  label_as_edge: Protein_has_induction
   source: protein
   target: induction annotation
-  label_in_input: protein_has_induction
+  label_in_input: Protein_has_induction
   properties: *id001
 protein has sequence_caution comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_sequence_caution
+  label_as_edge: Protein_has_sequence_caution
   source: protein
   target: sequence_caution annotation
-  label_in_input: protein_has_sequence_caution
+  label_in_input: Protein_has_sequence_caution
   properties: *id001
 protein has biotechnology comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_biotechnology
+  label_as_edge: Protein_has_biotechnology
   source: protein
   target: biotechnology annotation
-  label_in_input: protein_has_biotechnology
+  label_in_input: Protein_has_biotechnology
   properties: *id001
 protein has interaction comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_interaction
+  label_as_edge: Protein_has_interaction
   source: protein
   target: interaction annotation
-  label_in_input: protein_has_interaction
+  label_in_input: Protein_has_interaction
   properties: *id001
 protein has polymorphism comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_polymorphism
+  label_as_edge: Protein_has_polymorphism
   source: protein
   target: polymorphism annotation
-  label_in_input: protein_has_polymorphism
+  label_in_input: Protein_has_polymorphism
   properties: *id001
 protein has caution comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_caution
+  label_as_edge: Protein_has_caution
   source: protein
   target: caution annotation
-  label_in_input: protein_has_caution
+  label_in_input: Protein_has_caution
   properties: *id001
 protein has disease comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_disease
+  label_as_edge: Protein_has_disease_comment
   source: protein
   target: disease annotation
-  label_in_input: protein_has_disease
+  label_in_input: Protein_has_disease_comment
   properties: *id001
 protein has allergen comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_allergen
+  label_as_edge: Protein_has_allergen
   source: protein
   target: allergen annotation
-  label_in_input: protein_has_allergen
+  label_in_input: Protein_has_allergen
   properties: *id001
 protein has toxic_dose comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_toxic_dose
+  label_as_edge: Protein_has_toxic_dose
   source: protein
   target: toxic_dose annotation
-  label_in_input: protein_has_toxic_dose
+  label_in_input: Protein_has_toxic_dose
   properties: *id001
 protein has rna_editing comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_rna_editing
+  label_as_edge: Protein_has_rna_editing
   source: protein
   target: rna_editing annotation
-  label_in_input: protein_has_rna_editing
+  label_in_input: Protein_has_rna_editing
   properties: *id001
 protein has pharmaceutical comment:
   is_a: protein has comment
   represented_as: edge
-  label_as_edge: protein_has_pharmaceutical
+  label_as_edge: Protein_has_pharmaceutical
   source: protein
   target: pharmaceutical annotation
-  label_in_input: protein_has_pharmaceutical
+  label_in_input: Protein_has_pharmaceutical
   properties: *id001
 protein has chain feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_chain_feature
+  label_as_edge: Protein_has_chain_feature
   source: protein
   target: chain feature
-  label_in_input: protein_has_chain_feature
+  label_in_input: Protein_has_chain_feature
   properties: *id002
 protein has domain feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_domain_feature
+  label_as_edge: Protein_has_domain_feature
   source: protein
   target: domain feature
-  label_in_input: protein_has_domain_feature
+  label_in_input: Protein_has_domain_feature
   properties: *id002
 protein has coiled_coil feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_coiled_coil_feature
+  label_as_edge: Protein_has_coiled_coil_feature
   source: protein
   target: coiled_coil feature
-  label_in_input: protein_has_coiled_coil_feature
+  label_in_input: Protein_has_coiled_coil_feature
   properties: *id002
 protein has active_site feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_active_site_feature
+  label_as_edge: Protein_has_active_site_feature
   source: protein
   target: active_site feature
-  label_in_input: protein_has_active_site_feature
+  label_in_input: Protein_has_active_site_feature
   properties: *id002
 protein has binding_site feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_binding_site_feature
+  label_as_edge: Protein_has_binding_site_feature
   source: protein
   target: binding_site feature
-  label_in_input: protein_has_binding_site_feature
+  label_in_input: Protein_has_binding_site_feature
   properties: *id002
 protein has site feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_site_feature
+  label_as_edge: Protein_has_site_feature
   source: protein
   target: site feature
-  label_in_input: protein_has_site_feature
+  label_in_input: Protein_has_site_feature
   properties: *id002
 protein has mutagenesis feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_mutagenesis_feature
+  label_as_edge: Protein_has_mutagenesis_feature
   source: protein
   target: mutagenesis feature
-  label_in_input: protein_has_mutagenesis_feature
+  label_in_input: Protein_has_mutagenesis_feature
   properties: *id002
 protein has beta_strand feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_beta_strand_feature
+  label_as_edge: Protein_has_beta_strand_feature
   source: protein
   target: beta_strand feature
-  label_in_input: protein_has_beta_strand_feature
+  label_in_input: Protein_has_beta_strand_feature
   properties: *id002
 protein has helix feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_helix_feature
+  label_as_edge: Protein_has_helix_feature
   source: protein
   target: helix feature
-  label_in_input: protein_has_helix_feature
+  label_in_input: Protein_has_helix_feature
   properties: *id002
 protein has turn feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_turn_feature
+  label_as_edge: Protein_has_turn_feature
   source: protein
   target: turn feature
-  label_in_input: protein_has_turn_feature
+  label_in_input: Protein_has_turn_feature
   properties: *id002
 protein has signal feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_signal_feature
+  label_as_edge: Protein_has_signal_feature
   source: protein
   target: signal feature
-  label_in_input: protein_has_signal_feature
+  label_in_input: Protein_has_signal_feature
   properties: *id002
 protein has region feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_region_feature
+  label_as_edge: Protein_has_region_feature
   source: protein
   target: region feature
-  label_in_input: protein_has_region_feature
+  label_in_input: Protein_has_region_feature
   properties: *id002
 protein has glycosylation feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_glycosylation_feature
+  label_as_edge: Protein_has_glycosylation_feature
   source: protein
   target: glycosylation feature
-  label_in_input: protein_has_glycosylation_feature
+  label_in_input: Protein_has_glycosylation_feature
   properties: *id002
 protein has propeptide feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_propeptide_feature
+  label_as_edge: Protein_has_propeptide_feature
   source: protein
   target: propeptide feature
-  label_in_input: protein_has_propeptide_feature
+  label_in_input: Protein_has_propeptide_feature
   properties: *id002
 protein has peptide feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_peptide_feature
+  label_as_edge: Protein_has_peptide_feature
   source: protein
   target: peptide feature
-  label_in_input: protein_has_peptide_feature
+  label_in_input: Protein_has_peptide_feature
   properties: *id002
 protein has topological_domain feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_topological_domain_feature
+  label_as_edge: Protein_has_topological_domain_feature
   source: protein
   target: topological_domain feature
-  label_in_input: protein_has_topological_domain_feature
+  label_in_input: Protein_has_topological_domain_feature
   properties: *id002
 protein has transmembrane feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_transmembrane_feature
+  label_as_edge: Protein_has_transmembrane_feature
   source: protein
   target: transmembrane feature
-  label_in_input: protein_has_transmembrane_feature
+  label_in_input: Protein_has_transmembrane_feature
   properties: *id002
 protein has intramembrane feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_intramembrane_feature
+  label_as_edge: Protein_has_intramembrane_feature
   source: protein
   target: intramembrane feature
-  label_in_input: protein_has_intramembrane_feature
+  label_in_input: Protein_has_intramembrane_feature
   properties: *id002
 protein has motif feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_motif_feature
+  label_as_edge: Protein_has_motif_feature
   source: protein
   target: motif feature
-  label_in_input: protein_has_motif_feature
+  label_in_input: Protein_has_motif_feature
   properties: *id002
 protein has modified_residue feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_modified_residue_feature
+  label_as_edge: Protein_has_modified_residue_feature
   source: protein
   target: modified_residue feature
-  label_in_input: protein_has_modified_residue_feature
+  label_in_input: Protein_has_modified_residue_feature
   properties: *id002
 protein has disulfide_bond feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_disulfide_bond_feature
+  label_as_edge: Protein_has_disulfide_bond_feature
   source: protein
   target: disulfide_bond feature
-  label_in_input: protein_has_disulfide_bond_feature
+  label_in_input: Protein_has_disulfide_bond_feature
   properties: *id002
 protein has cross_link feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_cross_link_feature
+  label_as_edge: Protein_has_cross_link_feature
   source: protein
   target: cross_link feature
-  label_in_input: protein_has_cross_link_feature
+  label_in_input: Protein_has_cross_link_feature
   properties: *id002
 protein has compositional_bias feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_compositional_bias_feature
+  label_as_edge: Protein_has_compositional_bias_feature
   source: protein
   target: compositional_bias feature
-  label_in_input: protein_has_compositional_bias_feature
+  label_in_input: Protein_has_compositional_bias_feature
   properties: *id002
 protein has sequence_conflict feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_sequence_conflict_feature
+  label_as_edge: Protein_has_sequence_conflict_feature
   source: protein
   target: sequence_conflict feature
-  label_in_input: protein_has_sequence_conflict_feature
+  label_in_input: Protein_has_sequence_conflict_feature
   properties: *id002
 protein has alternative_sequence feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_alternative_sequence_feature
+  label_as_edge: Protein_has_alternative_sequence_feature
   source: protein
   target: alternative_sequence feature
-  label_in_input: protein_has_alternative_sequence_feature
+  label_in_input: Protein_has_alternative_sequence_feature
   properties: *id002
 protein has repeat feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_repeat_feature
+  label_as_edge: Protein_has_repeat_feature
   source: protein
   target: repeat feature
-  label_in_input: protein_has_repeat_feature
+  label_in_input: Protein_has_repeat_feature
   properties: *id002
 protein has transit_peptide feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_transit_peptide_feature
+  label_as_edge: Protein_has_transit_peptide_feature
   source: protein
   target: transit_peptide feature
-  label_in_input: protein_has_transit_peptide_feature
+  label_in_input: Protein_has_transit_peptide_feature
   properties: *id002
 protein has non_terminal_residue feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_non_terminal_residue_feature
+  label_as_edge: Protein_has_non_terminal_residue_feature
   source: protein
   target: non_terminal_residue feature
-  label_in_input: protein_has_non_terminal_residue_feature
+  label_in_input: Protein_has_non_terminal_residue_feature
   properties: *id002
 protein has zinc_finger feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_zinc_finger_feature
+  label_as_edge: Protein_has_zinc_finger_feature
   source: protein
   target: zinc_finger feature
-  label_in_input: protein_has_zinc_finger_feature
+  label_in_input: Protein_has_zinc_finger_feature
   properties: *id002
 protein has lipidation feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_lipidation_feature
+  label_as_edge: Protein_has_lipidation_feature
   source: protein
   target: lipidation feature
-  label_in_input: protein_has_lipidation_feature
+  label_in_input: Protein_has_lipidation_feature
   properties: *id002
 protein has natural_variant feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_natural_variant_feature
+  label_as_edge: Protein_has_natural_variant_feature
   source: protein
   target: natural_variant feature
-  label_in_input: protein_has_natural_variant_feature
+  label_in_input: Protein_has_natural_variant_feature
   properties: *id002
 protein has dna_binding feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_dna_binding_feature
+  label_as_edge: Protein_has_dna_binding_feature
   source: protein
   target: dna_binding feature
-  label_in_input: protein_has_dna_binding_feature
+  label_in_input: Protein_has_dna_binding_feature
   properties: *id002
 protein has initiator_methionine feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_initiator_methionine_feature
+  label_as_edge: Protein_has_initiator_methionine_feature
   source: protein
   target: initiator_methionine feature
-  label_in_input: protein_has_initiator_methionine_feature
+  label_in_input: Protein_has_initiator_methionine_feature
   properties: *id002
 protein has non_standard_residue feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_non_standard_residue_feature
+  label_as_edge: Protein_has_non_standard_residue_feature
   source: protein
   target: non_standard_residue feature
-  label_in_input: protein_has_non_standard_residue_feature
+  label_in_input: Protein_has_non_standard_residue_feature
   properties: *id002
 protein has sequence_uncertainty feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_sequence_uncertainty_feature
+  label_as_edge: Protein_has_sequence_uncertainty_feature
   source: protein
   target: sequence_uncertainty feature
-  label_in_input: protein_has_sequence_uncertainty_feature
+  label_in_input: Protein_has_sequence_uncertainty_feature
   properties: *id002
 protein has non_adjacent_residues feature:
   is_a: protein has feature
   represented_as: edge
-  label_as_edge: protein_has_non_adjacent_residues_feature
+  label_as_edge: Protein_has_non_adjacent_residues_feature
   source: protein
   target: non_adjacent_residues feature
-  label_in_input: protein_has_non_adjacent_residues_feature
+  label_in_input: Protein_has_non_adjacent_residues_feature
   properties: *id002
 keyword category:
   is_a: keyword
@@ -1691,21 +1670,21 @@ go term:
 keyword in category:
   is_a: association
   represented_as: edge
-  label_as_edge: keyword_in_category
+  label_as_edge: Keyword_in_category
   source: uniprot keyword
   target: keyword category
-  label_in_input: keyword_in_category
+  label_in_input: Keyword_in_category
 keyword is a:
   is_a: association
   represented_as: edge
-  label_as_edge: keyword_has_parent
+  label_as_edge: Keyword_has_parent
   source: uniprot keyword
   target: uniprot keyword
-  label_in_input: keyword_has_parent
+  label_in_input: Keyword_has_parent
 keyword mapped to go:
   is_a: association
   represented_as: edge
-  label_as_edge: keyword_mapped_to_go
+  label_as_edge: Keyword_mapped_to_go
   source: uniprot keyword
   target: go term
-  label_in_input: keyword_mapped_to_go
+  label_in_input: Keyword_mapped_to_go
