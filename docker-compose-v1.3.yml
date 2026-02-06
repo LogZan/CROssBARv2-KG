@@ -1,0 +1,56 @@
+version: '3.3'
+
+services:
+
+  import_v1_3:
+    image: neo4j:5.26.19-enterprise
+    container_name: import_v1_3
+    environment:
+      NEO4J_AUTH: none
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
+      FILL_DB_ON_STARTUP: "yes"
+    user: "7474:7474"
+    volumes:
+      - type: bind
+        source: /GenSIvePFS/users/clzeng/docker_data_v1.3
+        target: /data
+        read_only: false
+      - type: bind
+        source: ./scripts/import_local_v1_3.sh
+        target: /scripts/import_local_v1_3.sh
+        read_only: false
+      - type: bind
+        source: ./biocypher-out
+        target: /biocypher-out
+        read_only: false
+      - type: bind
+        source: /GenSIvePFS/users/clzeng/workspace/CROssBARv2-KG/biocypher-out
+        target: /GenSIvePFS/users/clzeng/workspace/CROssBARv2-KG/biocypher-out
+        read_only: false
+    command:
+      - /bin/bash
+      - /scripts/import_local_v1_3.sh
+
+  deploy_v1_3:
+    image: neo4j:5.26.19-enterprise
+    container_name: deploy_v1_3
+    user: "7474:7474"
+    volumes:
+      - type: bind
+        source: /GenSIvePFS/users/clzeng/docker_data_v1.3
+        target: /data
+        read_only: false
+    environment:
+      NEO4J_AUTH: none
+      NEO4J_dbms_security_auth__enabled: "false"
+      NEO4J_dbms_databases_default__to__read__only: "false"
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
+      NEO4J_PLUGINS: '["apoc", "bloom"]'
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*,bloom.*"
+      NEO4J_neo4j_bloom_authorization__role: "admin,reader,editor"
+    ports:
+      - "127.0.0.1:7475:7474"
+      - "7688:7687"
+    depends_on:
+      import_v1_3:
+        condition: service_completed_successfully
